@@ -381,6 +381,7 @@ mpv_args=(
     -Dmujs:default_library=static
     -Ddefault_library=static
     -Dprefer_static=true
+    -Dlibmpv=true
     -Dlua=luajit
     -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
 )
@@ -391,6 +392,9 @@ if [ "$2" = pack ]; then
     mkdir -p artifact/tmp
     echo "Copying:"
     cp -pv $build/mpv.com $build/mpv.exe etc/mpv-*.bat artifact/
+    # Copy libmpv
+    cp -pv $build/libmpv.a $build/libmpv.dll.a $build/libmpv-*.dll artifact/ 2>/dev/null || true
+    cp -pv $build/libmpv-2.dll artifact/ 2>/dev/null || true
 
     echo "Adding DLLs:"
     # grab everything we can get our hands on

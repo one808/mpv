@@ -1,4 +1,4 @@
-name: Build mpv Windows
+name: Build mpv Windows Static
 
 on:
   workflow_dispatch:
@@ -8,13 +8,23 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: i686
+            rust_target: i686-pc-windows-gnu
+            wine: wine32
+          - arch: x86_64
+            rust_target: x86_64-pc-windows-gnu
+            wine: wine64
     env:
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
       DOWNLOAD_CACHE: ${{ github.workspace }}/.ccache/downloads
-      TARGET: x86_64-w64-mingw32
-      RUST_TARGET: x86_64-pc-windows-gnu
+      TARGET: ${{ matrix.arch }}-w64-mingw32
+      RUST_TARGET: ${{ matrix.rust_target }}
 
     steps:
       - uses: actions/checkout@v5
@@ -35,7 +45,7 @@ jobs:
           rustup target add ${{ env.RUST_TARGET }}
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y ccache g++-mingw-w64 gcc-multilib python3-pip nasm ninja-build pkgconf wine64 wine
+          sudo apt-get install --no-install-recommends -y ccache g++-mingw-w64 gcc-multilib python3-pip nasm ninja-build pkgconf ${{ matrix.wine }} wine
           python3 -m pip install meson
 
       - name: Install Meson Wraps
@@ -45,16 +55,15 @@ jobs:
           meson subprojects download
 
       - name: Build libraries
-        run: |
-          ./ci/build-mingw64.sh
+        run: ./ci/build-mingw64.sh
 
-      - name: Build with meson
-        run: |
-          ./ci/build-mingw64.sh meson pack
+      - name: Build mpv + libmpv
+        run: ./ci/build-mingw64.sh meson pack
 
-      - name: Print meson log
-        if: failure()
-        run: cat ./mingw_build/meson-logs/meson-log.txt
+      - name: Copy headers
+        run: |
+          mkdir -p artifact/include/mpv
+          cp -v include/mpv/*.h artifact/include/mpv/
 
       - name: Functional test
         run: cd artifact && wine ./mpv.com -v --no-config
@@ -69,7 +78,7 @@ jobs:
         run: |
           VERSION_FILE=$(find . -path "*/common/version.h" -type f | head -n 1)
           VER=$(grep VERSION "$VERSION_FILE" | cut -d'"' -f2)
-          echo "name=mpv-${VER}-windows-x86_64-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          echo "name=mpv-${VER}-windows-${{ matrix.arch }}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v7
         with:
