@@ -17,14 +17,14 @@ jobs:
       RUST_TARGET: x86_64-pc-windows-gnu
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Get time
         id: get_time
         run: echo "timestamp=$(date +%s%N)" >> $GITHUB_OUTPUT
 
       - name: Restore cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ env.TARGET }}-${{ steps.get_time.outputs.timestamp }}
@@ -71,13 +71,13 @@ jobs:
           VER=$(grep VERSION "$VERSION_FILE" | cut -d'"' -f2)
           echo "name=mpv-${VER}-windows-x86_64-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: artifact/*
 
       - name: Save Cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: always()
         with:
           path: ${{ env.CCACHE_DIR }}
