@@ -26,7 +26,7 @@ export NM=$TARGET-nm
 export RANLIB=$TARGET-ranlib
 
 export CFLAGS="-O2 -pipe -Wall"
-export LDFLAGS="-fstack-protector-strong"
+export LDFLAGS="-fstack-protector-strong -static"
 
 . ./ci/build-common.sh
 
@@ -39,7 +39,7 @@ export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
 
 # autotools(-like)
-at_flags="--disable-static --enable-shared"
+at_flags="--enable-static --disable-shared"
 
 # meson
 fam=x86_64
@@ -48,7 +48,7 @@ cat >"$prefix_dir/crossfile" <<EOF
 [built-in options]
 buildtype = 'release'
 wrap_mode = 'nodownload'
-default_library = 'shared'
+default_library = 'static'
 [binaries]
 c = ['ccache', '${CC}']
 cpp = ['ccache', '${CXX}']
@@ -375,10 +375,12 @@ rm -rf $build
 
 mpv_args=(
     --cross-file "$prefix_dir/crossfile" $common_args
-    --buildtype debugoptimized
+    --buildtype release
     --force-fallback-for=mujs
     -Dmujs:werror=false
     -Dmujs:default_library=static
+    -Ddefault_library=static
+    -Dprefer_static=true
     -Dlua=luajit
     -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
 )
@@ -392,24 +394,22 @@ if [ "$2" = pack ]; then
 
     echo "Adding DLLs:"
     # grab everything we can get our hands on
-    cp -p "$prefix_dir/bin/"*.dll artifact/tmp/
+    cp -p "$prefix_dir/bin/"*.dll artifact/tmp/ 2>/dev/null || true
     shopt -s nullglob
     for file in /usr/lib/gcc/$TARGET/*-posix/*.dll /usr/$TARGET/lib/*.dll; do
-        cp -p "$file" artifact/tmp/
+        cp -p "$file" artifact/tmp/ 2>/dev/null || true
     done
-    # pick DLLs we need
+    # pick DLLs we need (static build: copy only essential runtime DLLs)
     pushd artifact/tmp
     dlls=(
         # compiler runtime
         libgcc_*.dll lib{ssp,stdc++,winpthread}-[0-9]*.dll
-        # ffmpeg
-        av*.dll sw*.dll postproc-[0-9]*.dll
-        # everything else
-        subrandr-[0-9]*.dll lib{ass,freetype,fribidi,harfbuzz,iconv,placebo}-[0-9]*.dll
-        lib{curl,shaderc_shared,spirv-cross-c-shared,dav1d,lcms2,zlib1}.dll
     )
+    # For static builds, also include these if present
     [[ -f vulkan-1.dll ]] && dlls+=(vulkan-1.dll)
-    mv -v "${dlls[@]}" ..
+    for dll in "${dlls[@]}"; do
+        [[ -f "$dll" ]] && mv -v "$dll" .. 2>/dev/null
+    done
     popd
     rm -rf artifact/tmp
 fi
