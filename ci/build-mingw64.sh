@@ -202,9 +202,6 @@ _amf_headers_mark=include/AMF/core/Version.h
 _ffmpeg () {
     [ -d ffmpeg ] || $gitclone https://github.com/FFmpeg/FFmpeg.git ffmpeg
     # Ensure shaderc.pc is findable
-    mkdir -p "$prefix_dir/lib/pkgconfig"
-    [ -L "$prefix_dir/lib/pkgconfig" ] || cp -v "$prefix_dir/usr/local/lib/pkgconfig/shaderc"*.pc "$prefix_dir/lib/pkgconfig/"
-    builddir ffmpeg
     local args=(
         --pkg-config=pkg-config --pkg-config-flags="--static" --target-os=mingw32 --enable-gpl
         --enable-cross-compile --cross-prefix=$TARGET- --arch=${TARGET%%-*}
@@ -229,9 +226,6 @@ _shaderc () {
         -DBUILD_SHARED_LIBS=OFF -DSHADERC_SKIP_TESTS=ON
     makeplusinstall
     popd
-    mkdir -p "$prefix_dir/lib/pkgconfig"
-    [ -L "$prefix_dir/lib/pkgconfig" ] || cp -v "$prefix_dir/usr/local/lib/pkgconfig/shaderc"*.pc "$prefix_dir/lib/pkgconfig/"
-}
 _shaderc_mark=lib/libshaderc_combined.a
 
 _spirv_cross () {
