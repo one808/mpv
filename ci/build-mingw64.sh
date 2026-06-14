@@ -233,7 +233,7 @@ _spirv_cross () {
     [ -d SPIRV-Cross ] || $gitclone https://github.com/KhronosGroup/SPIRV-Cross
     builddir SPIRV-Cross
     cmake .. "${cmake_args[@]}" \
-        -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_{CLI,STATIC}=OFF
+        -DSPIRV_CROSS_SHARED=OFF -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_CLI=OFF
     makeplusinstall
     popd
 }
