@@ -263,7 +263,7 @@ _vulkan_loader () {
     makeplusinstall
     popd
 }
-_vulkan_loader_mark=lib/libvulkan-1.a
+_vulkan_loader_mark=lib/libvulkan-1.dll.a
 
 _libplacebo () {
     [ -d libplacebo ] || $gitclone https://code.videolan.org/videolan/libplacebo.git
