@@ -79,7 +79,7 @@ cmake_args=(
     -DCMAKE_RC_COMPILER="${TARGET}-windres"
     -DCMAKE_ASM_COMPILER="$AS"
     -DCMAKE_BUILD_TYPE=Release
-    -DBUILD_SHARED_LIBS=ON
+    -DBUILD_SHARED_LIBS=OFF
 )
 
 export CC="ccache $CC"
