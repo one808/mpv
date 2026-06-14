@@ -36,7 +36,7 @@ fi
 
 # anything that uses pkg-config
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
-export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
+export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig:$PKG_CONFIG_SYSROOT_DIR/usr/local/lib/pkgconfig"
 
 # autotools(-like)
 at_flags="--enable-static --disable-shared"
