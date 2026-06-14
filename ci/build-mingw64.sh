@@ -205,7 +205,7 @@ _ffmpeg () {
     local args=(
         --pkg-config=pkg-config --target-os=mingw32 --enable-gpl
         --enable-cross-compile --cross-prefix=$TARGET- --arch=${TARGET%%-*}
-        --cc="$CC" --cxx="$CXX" $at_flags
+        --cc="$CC" --cxx="$CXX" --enable-shared --disable-static
         --disable-{doc,programs}
         --enable-muxer=spdif --enable-encoder=mjpeg,png --enable-libdav1d
     )
