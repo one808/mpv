@@ -203,7 +203,7 @@ _ffmpeg () {
     [ -d ffmpeg ] || $gitclone https://github.com/FFmpeg/FFmpeg.git ffmpeg
     # Ensure shaderc.pc is findable
     mkdir -p "$prefix_dir/lib/pkgconfig"
-    cp -v "$prefix_dir/usr/local/lib/pkgconfig/shaderc"*.pc "$prefix_dir/lib/pkgconfig/" 2>/dev/null || true
+    cp -v "$prefix_dir/usr/local/lib/pkgconfig/shaderc"*.pc "$prefix_dir/lib/pkgconfig/"
     builddir ffmpeg
     local args=(
         --pkg-config=pkg-config --pkg-config-flags="--static" --target-os=mingw32 --enable-gpl
@@ -230,7 +230,7 @@ _shaderc () {
     makeplusinstall
     popd
     mkdir -p "$prefix_dir/lib/pkgconfig"
-    cp -v "$prefix_dir/usr/local/lib/pkgconfig/shaderc"*.pc "$prefix_dir/lib/pkgconfig/" 2>/dev/null || true
+    cp -v "$prefix_dir/usr/local/lib/pkgconfig/shaderc"*.pc "$prefix_dir/lib/pkgconfig/"
 }
 _shaderc_mark=lib/libshaderc_combined.a
 
