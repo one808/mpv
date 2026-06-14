@@ -167,7 +167,7 @@ _zlib_ng () {
     popd
     ln -snf libzlib.dll.a "$prefix_dir/lib/libz.dll.a" # see zlib-ng/zlib-ng#1864
 }
-_zlib_ng_mark=lib/libzlib.a
+_zlib_ng_mark=lib/libz.a
 
 _dav1d () {
     [ -d dav1d ] || $gitclone https://code.videolan.org/videolan/dav1d.git
