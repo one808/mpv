@@ -226,6 +226,8 @@ _shaderc () {
         -DBUILD_SHARED_LIBS=OFF -DSHADERC_SKIP_TESTS=ON
     makeplusinstall
     popd
+    mkdir -p "$prefix_dir/lib/pkgconfig"
+    cp -v "$prefix_dir/usr/local/lib/pkgconfig/shaderc"*.pc "$prefix_dir/lib/pkgconfig/" 2>/dev/null || true
 }
 _shaderc_mark=lib/libshaderc_combined.a
 
