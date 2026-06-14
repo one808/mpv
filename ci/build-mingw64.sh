@@ -172,7 +172,7 @@ _zlib_ng_mark=lib/libzlib.dll.a
 _dav1d () {
     [ -d dav1d ] || $gitclone https://code.videolan.org/videolan/dav1d.git
     builddir dav1d
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
         -Denable_{tools,tests}=false
     makeplusinstall
     popd
@@ -182,7 +182,7 @@ _dav1d_mark=lib/libdav1d.dll.a
 _lcms2 () {
     [ -d lcms2 ] || $gitclone https://github.com/mm2/Little-CMS.git lcms2
     builddir lcms2
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
         -Dtests=disabled -D{utils,versionedlibs}=false
     makeplusinstall
     popd
@@ -268,7 +268,7 @@ _vulkan_loader_mark=lib/libvulkan-1.dll.a
 _libplacebo () {
     [ -d libplacebo ] || $gitclone https://code.videolan.org/videolan/libplacebo.git
     builddir libplacebo
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
         -Ddemos=false -D{opengl,d3d11,lcms}=enabled
     makeplusinstall
     popd
@@ -279,7 +279,7 @@ _freetype () {
     local ver=2.14.3
     gettar "https://download.savannah.gnu.org/releases/freetype/freetype-${ver}.tar.xz"
     builddir freetype-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile"
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared
     makeplusinstall
     popd
 }
@@ -289,7 +289,7 @@ _fribidi () {
     local ver=1.0.16
     gettar "https://github.com/fribidi/fribidi/releases/download/v${ver}/fribidi-${ver}.tar.xz"
     builddir fribidi-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
         -D{tests,docs}=false
     makeplusinstall
     popd
@@ -300,7 +300,7 @@ _harfbuzz () {
     local ver=14.2.0
     gettar "https://github.com/harfbuzz/harfbuzz/releases/download/${ver}/harfbuzz-${ver}.tar.xz"
     builddir harfbuzz-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
         -Dtests=disabled
     makeplusinstall
     popd
@@ -310,7 +310,7 @@ _harfbuzz_mark=lib/libharfbuzz.dll.a
 _libass () {
     [ -d libass ] || $gitclone https://github.com/libass/libass.git
     builddir libass
-    meson setup .. --cross-file "$prefix_dir/crossfile"
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared
     makeplusinstall
     popd
 }
