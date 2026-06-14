@@ -201,7 +201,7 @@ _amf_headers_mark=include/AMF/core/Version.h
 
 _ffmpeg () {
     [ -d ffmpeg ] || $gitclone https://github.com/FFmpeg/FFmpeg.git ffmpeg
-    # Ensure shaderc.pc is findable
+    builddir ffmpeg
     local args=(
         --pkg-config=pkg-config --pkg-config-flags="--static" --target-os=mingw32 --enable-gpl
         --enable-cross-compile --cross-prefix=$TARGET- --arch=${TARGET%%-*}
