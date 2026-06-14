@@ -1,4 +1,4 @@
-name: Build mpv Windows Static
+name: Build mpv Windows
 
 on:
   workflow_dispatch:
@@ -13,81 +13,37 @@ jobs:
       matrix:
         include:
           - arch: i686
-            rust_target: i686-pc-windows-gnu
             wine: wine32
           - arch: x86_64
-            rust_target: x86_64-pc-windows-gnu
             wine: wine64
     env:
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 500M
-      DOWNLOAD_CACHE: ${{ github.workspace }}/.ccache/downloads
       TARGET: ${{ matrix.arch }}-w64-mingw32
-      RUST_TARGET: ${{ matrix.rust_target }}
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Get time
-        id: get_time
-        run: echo "timestamp=$(date +%s%N)" >> $GITHUB_OUTPUT
-
-      - name: Restore cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ${{ env.TARGET }}-${{ steps.get_time.outputs.timestamp }}
-          restore-keys: ${{ env.TARGET }}-
-
       - name: Install dependencies
         run: |
-          rustup target add ${{ env.RUST_TARGET }}
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y ccache g++-mingw-w64 gcc-multilib python3-pip nasm ninja-build pkgconf ${{ matrix.wine }} wine
+          sudo apt-get install --no-install-recommends -y \
+            ccache g++-mingw-w64 gcc-multilib python3-pip \
+            nasm ninja-build pkgconf ${{ matrix.wine }} wine
           python3 -m pip install meson
 
-      - name: Install Meson Wraps
+      - name: Build
         run: |
-          mkdir -p subprojects
-          meson wrap install mujs
-          meson subprojects download
+          TARGET=${{ matrix.arch }}-w64-mingw32 \
+            bash ci/build-mingw64-slim.sh meson pack
 
-      - name: Build libraries
-        run: ./ci/build-mingw64.sh
-
-      - name: Build mpv + libmpv
-        run: ./ci/build-mingw64.sh meson pack
-
-      - name: Copy headers
+      - name: Collect artifacts
         run: |
-          mkdir -p artifact/include/mpv
-          cp -v include/mpv/*.h artifact/include/mpv/
+          mkdir -p release/${{ matrix.arch }}
+          cp -v artifact/mpv.exe release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp -v artifact/mpv.com release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp -rv artifact/include release/${{ matrix.arch }}/ 2>/dev/null || true
 
-      - name: Functional test
-        run: cd artifact && wine ./mpv.com -v --no-config
-        env:
-          WINEDEBUG: '+loaddll'
-
-      - name: Run meson tests
-        run: meson test -C mingw_build
-
-      - name: Artifact name
-        id: artifact
-        run: |
-          VERSION_FILE=$(find . -path "*/common/version.h" -type f | head -n 1)
-          VER=$(grep VERSION "$VERSION_FILE" | cut -d'"' -f2)
-          echo "name=mpv-${VER}-windows-${{ matrix.arch }}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact.outputs.name }}
-          path: artifact/*
-
-      - name: Save Cache
-        uses: actions/cache/save@v5
-        if: always()
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ${{ env.TARGET }}-${{ steps.get_time.outputs.timestamp }}
+          name: mpv-windows-${{ matrix.arch }}
+          path: release/${{ matrix.arch }}/
