@@ -269,7 +269,7 @@ _libplacebo () {
     [ -d libplacebo ] || $gitclone https://code.videolan.org/videolan/libplacebo.git
     builddir libplacebo
     meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=static \
-        -Ddemos=false -D{opengl,d3d11,lcms}=enabled
+        -Ddemos=false -D{opengl,lcms}=enabled
     makeplusinstall
     popd
 }
