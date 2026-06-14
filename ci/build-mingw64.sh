@@ -237,7 +237,7 @@ _spirv_cross () {
     makeplusinstall
     popd
 }
-_spirv_cross_mark=lib/libspirv-cross.a
+_spirv_cross_mark=lib/libspirv-cross-c.a
 
 _nv_headers () {
     [ -d nv-codec-headers ] || $gitclone https://github.com/FFmpeg/nv-codec-headers
