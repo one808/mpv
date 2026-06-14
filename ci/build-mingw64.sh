@@ -148,7 +148,10 @@ _iconv () {
     local ver=1.19
     gettar "https://ftpmirror.gnu.org/gnu/libiconv/libiconv-${ver}.tar.gz"
     builddir libiconv-${ver}
-    ../configure --host=$TARGET --enable-static --enable-shared
+    LDFLAGS_orig="$LDFLAGS"
+    LDFLAGS="-fstack-protector-strong"
+    ../configure --host=$TARGET --enable-static --enable-shared --disable-nls
+    LDFLAGS="$LDFLAGS_orig"
     makeplusinstall
     popd
 }
