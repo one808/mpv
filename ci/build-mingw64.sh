@@ -201,6 +201,9 @@ _amf_headers_mark=include/AMF/core/Version.h
 
 _ffmpeg () {
     [ -d ffmpeg ] || $gitclone https://github.com/FFmpeg/FFmpeg.git ffmpeg
+    # Ensure shaderc.pc is findable
+    mkdir -p "$prefix_dir/lib/pkgconfig"
+    cp -v "$prefix_dir/usr/local/lib/pkgconfig/shaderc"*.pc "$prefix_dir/lib/pkgconfig/" 2>/dev/null || true
     builddir ffmpeg
     local args=(
         --pkg-config=pkg-config --pkg-config-flags="--static" --target-os=mingw32 --enable-gpl
