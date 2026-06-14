@@ -26,6 +26,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          rustup target add ${{ matrix.rust_target }}
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
