@@ -148,14 +148,14 @@ _iconv () {
     local ver=1.19
     gettar "https://ftpmirror.gnu.org/gnu/libiconv/libiconv-${ver}.tar.gz"
     builddir libiconv-${ver}
-    LDFLAGS_orig="$LDFLAGS"
-    LDFLAGS="-fstack-protector-strong"
-    ../configure --host=$TARGET --enable-static --enable-shared --disable-nls
-    LDFLAGS="$LDFLAGS_orig"
+    
+    
+    ../configure --host=$TARGET --enable-static --disable-shared --disable-nls
+    
     makeplusinstall
     popd
 }
-_iconv_mark=lib/libiconv.dll.a
+_iconv_mark=lib/libiconv.a
 
 _zlib_ng () {
     local ver=2.3.3
@@ -167,27 +167,27 @@ _zlib_ng () {
     popd
     ln -snf libzlib.dll.a "$prefix_dir/lib/libz.dll.a" # see zlib-ng/zlib-ng#1864
 }
-_zlib_ng_mark=lib/libzlib.dll.a
+_zlib_ng_mark=lib/libzlib.a
 
 _dav1d () {
     [ -d dav1d ] || $gitclone https://code.videolan.org/videolan/dav1d.git
     builddir dav1d
-    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=static \
         -Denable_{tools,tests}=false
     makeplusinstall
     popd
 }
-_dav1d_mark=lib/libdav1d.dll.a
+_dav1d_mark=lib/libdav1d.a
 
 _lcms2 () {
     [ -d lcms2 ] || $gitclone https://github.com/mm2/Little-CMS.git lcms2
     builddir lcms2
-    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=static \
         -Dtests=disabled -D{utils,versionedlibs}=false
     makeplusinstall
     popd
 }
-_lcms2_mark=lib/liblcms2.dll.a
+_lcms2_mark=lib/liblcms2.a
 
 _amf_headers () {
     local ver=1.5.2
@@ -205,7 +205,7 @@ _ffmpeg () {
     local args=(
         --pkg-config=pkg-config --target-os=mingw32 --enable-gpl
         --enable-cross-compile --cross-prefix=$TARGET- --arch=${TARGET%%-*}
-        --cc="$CC" --cxx="$CXX" --enable-shared --disable-static
+        --cc="$CC" --cxx="$CXX" --enable-static --disable-shared
         --disable-{doc,programs}
         --enable-muxer=spdif --enable-encoder=mjpeg,png --enable-libdav1d
     )
@@ -214,7 +214,7 @@ _ffmpeg () {
     makeplusinstall
     popd
 }
-_ffmpeg_mark=lib/libavcodec.dll.a
+_ffmpeg_mark=lib/libavcodec.a
 
 _shaderc () {
     if [ ! -d shaderc ]; then
@@ -227,7 +227,7 @@ _shaderc () {
     makeplusinstall
     popd
 }
-_shaderc_mark=lib/libshaderc_shared.dll.a
+_shaderc_mark=lib/libshaderc_combined.a
 
 _spirv_cross () {
     [ -d SPIRV-Cross ] || $gitclone https://github.com/KhronosGroup/SPIRV-Cross
@@ -237,7 +237,7 @@ _spirv_cross () {
     makeplusinstall
     popd
 }
-_spirv_cross_mark=lib/libspirv-cross-c-shared.dll.a
+_spirv_cross_mark=lib/libspirv-cross.a
 
 _nv_headers () {
     [ -d nv-codec-headers ] || $gitclone https://github.com/FFmpeg/nv-codec-headers
@@ -263,58 +263,58 @@ _vulkan_loader () {
     makeplusinstall
     popd
 }
-_vulkan_loader_mark=lib/libvulkan-1.dll.a
+_vulkan_loader_mark=lib/libvulkan-1.a
 
 _libplacebo () {
     [ -d libplacebo ] || $gitclone https://code.videolan.org/videolan/libplacebo.git
     builddir libplacebo
-    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=static \
         -Ddemos=false -D{opengl,d3d11,lcms}=enabled
     makeplusinstall
     popd
 }
-_libplacebo_mark=lib/libplacebo.dll.a
+_libplacebo_mark=lib/libplacebo.a
 
 _freetype () {
     local ver=2.14.3
     gettar "https://download.savannah.gnu.org/releases/freetype/freetype-${ver}.tar.xz"
     builddir freetype-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=static
     makeplusinstall
     popd
 }
-_freetype_mark=lib/libfreetype.dll.a
+_freetype_mark=lib/libfreetype.a
 
 _fribidi () {
     local ver=1.0.16
     gettar "https://github.com/fribidi/fribidi/releases/download/v${ver}/fribidi-${ver}.tar.xz"
     builddir fribidi-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=static \
         -D{tests,docs}=false
     makeplusinstall
     popd
 }
-_fribidi_mark=lib/libfribidi.dll.a
+_fribidi_mark=lib/libfribidi.a
 
 _harfbuzz () {
     local ver=14.2.0
     gettar "https://github.com/harfbuzz/harfbuzz/releases/download/${ver}/harfbuzz-${ver}.tar.xz"
     builddir harfbuzz-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared \
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=static \
         -Dtests=disabled
     makeplusinstall
     popd
 }
-_harfbuzz_mark=lib/libharfbuzz.dll.a
+_harfbuzz_mark=lib/libharfbuzz.a
 
 _libass () {
     [ -d libass ] || $gitclone https://github.com/libass/libass.git
     builddir libass
-    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=shared
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Ddefault_library=static
     makeplusinstall
     popd
 }
-_libass_mark=lib/libass.dll.a
+_libass_mark=lib/libass.a
 
 _luajit () {
     [ -d LuaJIT ] || $gitclone https://github.com/LuaJIT/LuaJIT.git
@@ -336,7 +336,7 @@ _luajit_mark=lib/libluajit-5.1.a
 _subrandr () {
     build_subrandr "$prefix_dir" --target "$RUST_TARGET" -- -- -L"$prefix_dir"/lib
 }
-_subrandr_mark=lib/libsubrandr.dll.a
+_subrandr_mark=lib/libsubrandr.a
 
 _curl () {
     local ver=8.20.0
@@ -347,7 +347,7 @@ _curl () {
     makeplusinstall
     popd
 }
-_curl_mark=lib/libcurl.dll.a
+_curl_mark=lib/libcurl.a
 
 for x in iconv zlib-ng shaderc spirv-cross amf-headers nv-headers dav1d lcms2; do
     build_if_missing $x

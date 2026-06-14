@@ -31,10 +31,16 @@ jobs:
             nasm ninja-build pkgconf ${{ matrix.wine }} wine
           python3 -m pip install meson
 
+      - name: Install Meson Wraps
+        run: |
+          mkdir -p subprojects
+          meson wrap install mujs
+          meson subprojects download
+
       - name: Build
         run: |
-          TARGET=${{ matrix.arch }}-w64-mingw32 \
-            bash ci/build-mingw64-slim.sh meson pack
+          ./ci/build-mingw64.sh
+          ./ci/build-mingw64.sh meson pack
 
       - name: Collect artifacts
         run: |
