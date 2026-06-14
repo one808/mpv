@@ -226,6 +226,7 @@ _shaderc () {
         -DBUILD_SHARED_LIBS=OFF -DSHADERC_SKIP_TESTS=ON
     makeplusinstall
     popd
+}
 _shaderc_mark=lib/libshaderc_combined.a
 
 _spirv_cross () {
