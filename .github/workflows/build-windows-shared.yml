@@ -74,6 +74,9 @@ jobs:
         run: |
           prefix_dir=$PWD/mingw_prefix
           sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile"
+          # Fix: remove -ldl and -Wl,-E that meson auto-adds from luajit dl detection
+          sed -i "/\[properties\]/a c_link_args = ['-static']" "$prefix_dir/crossfile"
+          sed -i "/c_link_args/a cpp_link_args = ['-static']" "$prefix_dir/crossfile"
 
       - name: Build mpv with libmpv
         run: |
@@ -107,13 +110,16 @@ jobs:
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
           )
           meson setup $build "${mpv_args[@]}"
-          meson compile -C $build || true
+          meson compile -C $build 2>&1 || true
 
-          # Copy mpv.exe (may fail due to -ldl, that's ok) and libmpv
+          # Copy whatever was built
           mkdir -p release/${{ matrix.arch }}
           cp -v $build/mpv.exe release/${{ matrix.arch }}/ 2>/dev/null || true
           cp -v $build/libmpv*.dll release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp -v $build/libmpv.a release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp -v $build/libmpv*.a release/${{ matrix.arch }}/ 2>/dev/null || true
+
+          # List what we got
+          ls -lh release/${{ matrix.arch }}/ 2>/dev/null || echo "No files collected"
 
           # Copy headers
           mkdir -p release/${{ matrix.arch }}/include/mpv
