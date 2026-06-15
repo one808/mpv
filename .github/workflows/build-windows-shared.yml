@@ -80,19 +80,18 @@ jobs:
           build=mingw_build
           rm -rf $build
 
-          meson setup $build \
-            --cross-file "$prefix_dir/crossfile" \
-            --buildtype release \
-            --force-fallback-for=mujs \
-            -Dmujs:werror=false \
-            -Dmujs:default_library=static \
-            -Dmujs:dl=disabled \
-            -Dlua=luajit \
-            -Dlibmpv=true \
-            -Ddefault_library=shared \
-            -Dprefer_static=true \
+          # Use same args as original build script, just add libmpv
+          mpv_args=(
+            --cross-file "$prefix_dir/crossfile"
+            --buildtype debugoptimized
+            --force-fallback-for=mujs
+            -Dmujs:werror=false
+            -Dmujs:default_library=static
+            -Dlua=luajit
+            -Dlibmpv=true
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
-
+          )
+          meson setup $build "${mpv_args[@]}"
           meson compile -C $build
 
       - name: Collect artifacts
