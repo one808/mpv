@@ -136,6 +136,7 @@ jobs:
             -lshcore -ldwmapi -limm32 -lntdll -lversion -lwinmm \
             -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid \
             -lopengl32 -luxtheme -lpathcch -liphlpapi \
+            -lstdc++ -lgcc_s \
             -Wl,--allow-shlib-undefined 2>&1 || true
 
           echo "=== Result ==="
