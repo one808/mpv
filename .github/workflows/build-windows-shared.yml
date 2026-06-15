@@ -107,7 +107,8 @@ jobs:
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
           )
           meson setup $build "${mpv_args[@]}"
-          meson compile -C $build
+          # Only build libmpv, skip mpv.exe to avoid -ldl issue
+          meson compile -C $build libmpv.a
 
           # Copy mpv.exe (links to libmpv.dll only) and libmpv.dll (all deps static)
           mkdir -p release/${{ matrix.arch }}
