@@ -113,32 +113,26 @@ jobs:
 
           echo "=== Creating libmpv-2.dll from static libmpv.a ==="
 
-          # The mpv.exe link command has all the correct -l flags from meson
-          # Extract it from build.ninja - look for the rule that links mpv.exe
-          LINK_LINE=$(grep -o 'x86_64-w64-mingw32-gcc.*-o.*mpv\.exe.*' $build/build.ninja 2>/dev/null | head -1)
+          # Use ninja -t commands to get the exact mpv.exe link command
+          LINK_LINE=$(ninja -C $build -t commands mpv.exe 2>/dev/null | grep "\-o.*mpv\.exe" | tail -1)
 
           if [ -z "$LINK_LINE" ]; then
-            echo "ERROR: Could not extract link command from build.ninja"
+            echo "ERROR: Could not extract link command"
             exit 1
           fi
 
-          echo "Original link command (first 300 chars):"
+          echo "Original link (first 300 chars):"
           echo "${LINK_LINE:0:300}"
 
-          # Transform the link command for DLL creation:
-          # 1. Replace -o mpv.exe with -o libmpv-2.dll
-          # 2. Add -shared
-          # 3. Replace --whole-archive/--no-whole-archive (already there from meson)
-          # 4. Add --out-implib for import library
+          # Transform for DLL: replace exe output with dll + implib, swap export-dynamic
           DLL_CMD=$(echo "$LINK_LINE" | \
-            sed 's|-o mpv.exe|-o libmpv-2.dll -Wl,--out-implib=libmpv.dll.a|' | \
+            sed 's|-o mpv\.exe|-o libmpv-2.dll -Wl,--out-implib=libmpv.dll.a|' | \
             sed 's|--export-dynamic|--export-all-symbols|')
 
           echo ""
-          echo "DLL link command (first 300 chars):"
+          echo "DLL command (first 300 chars):"
           echo "${DLL_CMD:0:300}"
 
-          # Execute the modified link command
           eval "$DLL_CMD" 2>&1 || true
 
           echo ""
