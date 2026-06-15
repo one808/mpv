@@ -21,8 +21,23 @@ jobs:
             rust_target: x86_64-pc-windows-gnu
             wine: wine64
 
+    env:
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
+      TARGET: ${{ matrix.target }}
+      RUST_TARGET: ${{ matrix.rust_target }}
+
     steps:
       - uses: actions/checkout@v5
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+          restore-keys: |
+            ccache-${{ matrix.arch }}-
 
       - name: Install dependencies
         run: |
@@ -41,21 +56,24 @@ jobs:
           meson subprojects download
 
       - name: Build
-        env:
-          TARGET: ${{ matrix.target }}
-          RUST_TARGET: ${{ matrix.rust_target }}
         run: |
           ./ci/build-mingw64.sh
           ./ci/build-mingw64.sh meson pack
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
 
       - name: Collect artifacts
         run: |
           mkdir -p release/${{ matrix.arch }}
           cp -v artifact/mpv.exe release/${{ matrix.arch }}/ 2>/dev/null || true
           cp -v artifact/mpv.com release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp -rv artifact/include release/${{ matrix.arch }}/ 2>/dev/null || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mpv-windows-${{ matrix.arch }}
           path: release/${{ matrix.arch }}/
