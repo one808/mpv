@@ -59,7 +59,6 @@ jobs:
         if: matrix.arch == 'i686'
         run: |
           echo "WINEPATH=/usr/i686-w64-mingw32/lib;/usr/lib/gcc/i686-w64-mingw32/13-posix" >> $GITHUB_ENV
-          python3 -m pip install meson
 
       - name: Install Meson Wraps
         run: |
@@ -67,19 +66,25 @@ jobs:
           meson wrap install mujs
           meson subprojects download
 
-      - name: Build dependencies
-        run: ./ci/build-mingw64.sh
+      # Step 1: Build dependencies as static libraries
+      - name: Build dependencies (static)
+        run: |
+          # Temporarily set crossfile to static for dependency build
+          prefix_dir=$PWD/mingw_prefix
+          if [ -f "$prefix_dir/crossfile" ]; then
+            sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile"
+          fi
+          ./ci/build-mingw64.sh
+          # Create empty libdl.a for luajit
+          $TARGET-ar rcs "$prefix_dir/lib/libdl.a" 2>/dev/null || true
 
-      - name: Override crossfile for static deps
+      # Step 2: Restore crossfile to shared, build mpv with libmpv
+      - name: Build mpv with libmpv (shared DLL, static deps)
         run: |
           prefix_dir=$PWD/mingw_prefix
-          sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile"
-          # Create empty libdl.a to satisfy luajit's -ldl requirement on Windows
-          $TARGET-ar rcs "$prefix_dir/lib/libdl.a"
+          # Restore crossfile to shared for libmpv.dll build
+          sed -i "s/default_library = 'static'/default_library = 'shared'/" "$prefix_dir/crossfile"
 
-      - name: Build mpv with libmpv
-        run: |
-          prefix_dir=$PWD/mingw_prefix
           export CC=$TARGET-gcc-posix
           export CXX=$TARGET-g++-posix
           export AR=$TARGET-ar
@@ -93,34 +98,62 @@ jobs:
           build=mingw_build
           rm -rf $build
 
-          # Dependencies are static, libmpv is shared, mpv.exe links only to libmpv
+          # Dependencies are already static .a files in prefix_dir/lib/
+          # libmpv will be built as shared DLL, linking against those static deps
           mpv_args=(
             --cross-file "$prefix_dir/crossfile"
             --buildtype release
             --force-fallback-for=mujs
             -Dmujs:werror=false
             -Dmujs:default_library=static
-            -Ddefault_library=static
-            -Dprefer_static=true
-            -Dlibmpv=true
             -Dlua=luajit
+            -Dlibmpv=true
+            -Dprefer_static=true
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
           )
           meson setup $build "${mpv_args[@]}"
           meson compile -C $build
 
-          # Copy whatever was built
+      # Step 3: Collect only mpv.exe + libmpv-2.dll + headers
+      - name: Collect artifacts
+        run: |
+          build=mingw_build
           mkdir -p release/${{ matrix.arch }}
+
+          # mpv.exe (links to libmpv-2.dll)
           cp -v $build/mpv.exe release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp -v $build/libmpv*.dll release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp -v $build/libmpv*.a release/${{ matrix.arch }}/ 2>/dev/null || true
 
-          # List what we got
-          ls -lh release/${{ matrix.arch }}/ 2>/dev/null || echo "No files collected"
+          # libmpv-2.dll (all deps statically linked inside)
+          cp -v $build/libmpv-2.dll release/${{ matrix.arch }}/ 2>/dev/null || true
 
-          # Copy headers
+          # Import library
+          cp -v $build/libmpv.dll.a release/${{ matrix.arch }}/ 2>/dev/null || true
+
+          # Headers
           mkdir -p release/${{ matrix.arch }}/include/mpv
           cp -v include/mpv/*.h release/${{ matrix.arch }}/include/mpv/
+
+          # Show what we got
+          echo "=== Release contents ==="
+          ls -lh release/${{ matrix.arch }}/
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+
+      - name: Wait for cache
+        if: always()
+        run: sleep 5
+
+      - name: Save dependencies cache
+        uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: ${{ github.workspace }}/mingw_prefix
+          key: deps-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
 
       - uses: actions/upload-artifact@v7
         with:
