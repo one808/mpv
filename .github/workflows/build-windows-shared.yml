@@ -52,8 +52,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             ccache g++-mingw-w64 gcc-multilib python3-pip \
-            nasm ninja-build pkgconf ${{ matrix.wine }} wine \
-            libgcc-s1:i386
+            nasm ninja-build pkgconf ${{ matrix.wine }} wine
+          python3 -m pip install meson
+
+      - name: Fix Wine 32-bit DLLs
+        if: matrix.arch == 'i686'
+        run: |
+          echo "WINEPATH=/usr/i686-w64-mingw32/lib;/usr/lib/gcc/i686-w64-mingw32/13-posix" >> $GITHUB_ENV
           python3 -m pip install meson
 
       - name: Install Meson Wraps
