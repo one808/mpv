@@ -66,16 +66,50 @@ jobs:
           meson wrap install mujs
           meson subprojects download
 
-      # Step 1: Build all as static
-      - name: Build static libraries
+      # Step 1: Build dependencies as static
+      - name: Build static dependencies
         run: |
           prefix_dir=$PWD/mingw_prefix
           sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile" 2>/dev/null || true
           $TARGET-ar rcs "$prefix_dir/lib/libdl.a" 2>/dev/null || true
-          ./ci/build-mingw64.sh
+          # Build only dependencies (no mpv)
+          ./ci/build-mingw64.sh || true
+          echo "=== Dependencies built ==="
+          ls -lh $prefix_dir/lib/*.a 2>/dev/null | head -10
 
-          echo "=== Static build output ==="
-          ls -lh mingw_build/libmpv*.a mingw_build/mpv.exe 2>/dev/null
+      # Step 1b: Build libmpv.a + mpv.exe with meson
+      - name: Build libmpv and mpv
+        run: |
+          prefix_dir=$PWD/mingw_prefix
+          export CC=$TARGET-gcc-posix
+          export CXX=$TARGET-g++-posix
+          export AR=$TARGET-ar
+          export NM=$TARGET-nm
+          export RANLIB=$TARGET-ranlib
+          export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
+          export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
+          export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
+          export PKG_CONFIG_LIBDIR="$prefix_dir/lib/pkgconfig"
+
+          build=mingw_build
+          rm -rf $build
+
+          mpv_args=(
+            --cross-file "$prefix_dir/crossfile"
+            --buildtype release
+            --force-fallback-for=mujs
+            -Dmujs:werror=false
+            -Dmujs:default_library=static
+            -Dlua=luajit
+            -Dlibmpv=true
+            -Dprefer_static=true
+            -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
+          )
+          meson setup $build "${mpv_args[@]}"
+          meson compile -C $build
+
+          echo "=== Build output ==="
+          ls -lh $build/libmpv*.a $build/mpv.exe 2>/dev/null
 
       # Step 2: Create libmpv.dll from static using the mpv.exe link command
       - name: Create libmpv.dll
