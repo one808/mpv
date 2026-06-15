@@ -110,26 +110,32 @@ jobs:
         run: |
           prefix_dir=$PWD/mingw_prefix
           build=mingw_build
-          export CC=$TARGET-gcc-posix
-          export CXX=$TARGET-g++-posix
 
           echo "=== Creating libmpv-2.dll from static libmpv.a ==="
 
-          # Create DLL from libmpv.a with --whole-archive to pull in all symbols
+          # Collect all .a files except libdl.a and libmpv.a itself
+          ALL_LIBS=$(find "$prefix_dir/lib" -name "*.a" \
+            ! -name "libdl.a" ! -name "libmpv.a" \
+            ! -name "libmpv.dll.a" 2>/dev/null)
+
+          # Build linker flags from .a files
+          LDFLAGS=""
+          for lib in $ALL_LIBS; do
+            LDFLAGS="$LDFLAGS -Wl,--whole-archive $lib -Wl,--no-whole-archive"
+          done
+
           $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
             -Wl,--whole-archive $build/libmpv.a -Wl,--no-whole-archive \
+            $LDFLAGS \
             -Wl,--out-implib=$build/libmpv.dll.a \
             -Wl,--no-undefined \
             -Wl,--nxcompat,--no-seh,--dynamicbase \
             -L"$prefix_dir/lib" \
-            $(find "$prefix_dir/lib" -name "*.a" ! -name "libdl.a" ! -name "libmpv.a" | sed 's/^/-L/;s|/lib/[^/]*$||' | sort -u | head -1) \
-            -L"$prefix_dir/lib" \
-            $(ls "$prefix_dir/lib/"*.a 2>/dev/null | grep -v libdl | grep -v libmpv | sed 's|.*/||;s|^|-l|;s|\.a$||') \
             -lws2_32 -lbcrypt -lcrypt32 -lncrypt -lsecur32 \
             -luser32 -lgdi32 -ladvapi32 -lshell32 -lole32 -loleaut32 \
             -lshcore -ldwmapi -limm32 -lntdll -lversion -lwinmm \
-            -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid -lbcrypt \
-            -lopengl32 -luxtheme -lpathcch -liphlpapi -ladvapi32 \
+            -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid \
+            -lopengl32 -luxtheme -lpathcch -liphlpapi \
             -Wl,--allow-shlib-undefined 2>&1 || true
 
           echo "=== Result ==="
