@@ -102,6 +102,8 @@ jobs:
             -Dprefer_static=true
             -Dlibmpv=true
             -Dlua=luajit
+            -Dc_link_args='-Wl,--no-undefined'
+            -Dcpp_link_args='-Wl,--no-undefined'
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
           )
           meson setup $build "${mpv_args[@]}"
