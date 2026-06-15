@@ -223,3 +223,4 @@ CROSSEOF
         with:
           name: mpv-shared-${{ matrix.arch }}
           path: release/${{ matrix.arch }}/
+# trigger
