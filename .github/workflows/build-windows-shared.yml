@@ -74,9 +74,8 @@ jobs:
         run: |
           prefix_dir=$PWD/mingw_prefix
           sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile"
-          # Fix: remove -ldl and -Wl,-E that meson auto-adds from luajit dl detection
-          sed -i "/\[properties\]/a c_link_args = ['-static']" "$prefix_dir/crossfile"
-          sed -i "/c_link_args/a cpp_link_args = ['-static']" "$prefix_dir/crossfile"
+          # Create empty libdl.a to satisfy luajit's -ldl requirement on Windows
+          $TARGET-ar rcs "$prefix_dir/lib/libdl.a"
 
       - name: Build mpv with libmpv
         run: |
@@ -105,12 +104,10 @@ jobs:
             -Dprefer_static=true
             -Dlibmpv=true
             -Dlua=luajit
-            -Dc_link_args='-Wl,--no-undefined'
-            -Dcpp_link_args='-Wl,--no-undefined'
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
           )
           meson setup $build "${mpv_args[@]}"
-          meson compile -C $build 2>&1 || true
+          meson compile -C $build
 
           # Copy whatever was built
           mkdir -p release/${{ matrix.arch }}
