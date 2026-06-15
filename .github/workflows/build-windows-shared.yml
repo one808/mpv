@@ -90,6 +90,7 @@ jobs:
             -Dlibmpv=true \
             -Ddefault_library=shared \
             -Dprefer_static=true \
+            -Ddl=disabled \
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
 
           meson compile -C $build
