@@ -86,11 +86,11 @@ jobs:
             --force-fallback-for=mujs \
             -Dmujs:werror=false \
             -Dmujs:default_library=static \
+            -Dmujs:dl=disabled \
             -Dlua=luajit \
             -Dlibmpv=true \
             -Ddefault_library=shared \
             -Dprefer_static=true \
-            -Ddl=disabled \
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
 
           meson compile -C $build
