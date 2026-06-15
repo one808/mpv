@@ -35,15 +35,8 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}-static
           restore-keys: ccache-${{ matrix.arch }}-
-
-      - name: Restore dependencies cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ${{ github.workspace }}/mingw_prefix
-          key: deps-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
-          restore-keys: deps-${{ matrix.arch }}-
 
       - name: Install dependencies
         run: |
@@ -66,18 +59,44 @@ jobs:
           meson wrap install mujs
           meson subprojects download
 
-      # Step 1: Build dependencies as static
+      # Step 1: Build ALL dependencies as static (clean rebuild, no cache)
       - name: Build static dependencies
         run: |
           prefix_dir=$PWD/mingw_prefix
-          sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile" 2>/dev/null || true
-          $TARGET-ar rcs "$prefix_dir/lib/libdl.a" 2>/dev/null || true
-          # Build only dependencies (no mpv)
-          ./ci/build-mingw64.sh || true
-          echo "=== Dependencies built ==="
-          ls -lh $prefix_dir/lib/*.a 2>/dev/null | head -10
+          rm -rf "$prefix_dir"
+          mkdir -p "$prefix_dir"
 
-      # Step 1b: Build libmpv.a + mpv.exe with meson
+          fam=x86_64
+          [[ "$TARGET" == "i686-"* ]] && fam=x86
+          cat >"$prefix_dir/crossfile" <<CROSSEOF
+[built-in options]
+buildtype = 'release'
+wrap_mode = 'nodownload'
+default_library = 'static'
+[binaries]
+c = ['ccache', '$TARGET-gcc-posix']
+cpp = ['ccache', '$TARGET-g++-posix']
+ar = '$TARGET-ar'
+nm = '$TARGET-nm'
+strip = '$TARGET-strip'
+pkgconfig = 'pkg-config'
+pkg-config = 'pkg-config'
+windres = '$TARGET-windres'
+dlltool = '$TARGET-dlltool'
+nasm = 'nasm'
+exe_wrapper = 'wine'
+[host_machine]
+system = 'windows'
+cpu_family = '${fam}'
+cpu = '${TARGET%%-*}'
+endian = 'little'
+CROSSEOF
+
+          $TARGET-ar rcs "$prefix_dir/lib/libdl.a" 2>/dev/null || true
+          ./ci/build-mingw64.sh || true
+          echo "=== Static deps: $(find "$prefix_dir/lib" -name '*.a' | wc -l) .a files ==="
+
+      # Step 2: Build libmpv.a + mpv.exe (all static)
       - name: Build libmpv and mpv
         run: |
           prefix_dir=$PWD/mingw_prefix
@@ -94,140 +113,89 @@ jobs:
           build=mingw_build
           rm -rf $build
 
-          mpv_args=(
-            --cross-file "$prefix_dir/crossfile"
-            --buildtype release
-            --force-fallback-for=mujs
-            -Dmujs:werror=false
-            -Dmujs:default_library=static
-            -Dlua=luajit
-            -Dlibmpv=true
-            -Dprefer_static=true
+          meson setup $build \
+            --cross-file "$prefix_dir/crossfile" \
+            --buildtype release \
+            --force-fallback-for=mujs \
+            -Dmujs:werror=false \
+            -Dmujs:default_library=static \
+            -Dlua=luajit \
+            -Dlibmpv=true \
+            -Dprefer_static=true \
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
-          )
-          meson setup $build "${mpv_args[@]}"
+
           meson compile -C $build
+          echo "=== libmpv.a + mpv.exe built ==="
+          ls -lh $build/libmpv*.a $build/mpv.exe
 
-          echo "=== Build output ==="
-          ls -lh $build/libmpv*.a $build/mpv.exe 2>/dev/null
-
-      # Step 2: Create libmpv.dll from static using the mpv.exe link command
-      - name: Create libmpv.dll
+      # Step 3: Create libmpv-2.dll from static libmpv.a (--whole-archive)
+      - name: Create libmpv-2.dll
         run: |
           prefix_dir=$PWD/mingw_prefix
           build=mingw_build
 
-          echo "=== Step 1: Get mpv.exe link command from ninja ==="
-          # ninja -v shows the actual commands
-          LINK_LINE=$(ninja -C $build -v mpv.exe 2>&1 | grep "x86_64.*-shared\|x86_64.*gcc.*-o.*mpv" | tail -1)
+          echo "=== Creating libmpv-2.dll (all deps statically linked) ==="
 
-          if [ -z "$LINK_LINE" ]; then
-            # Fallback: try to get it from build.ninja using ninja -t commands
-            LINK_LINE=$(ninja -C $build -t commands mpv.exe 2>/dev/null | grep "gcc" | head -1)
-          fi
+          # Find ALL .a files (deps + libmpv)
+          ALL_LIBS=$(find "$prefix_dir/lib" "$build" "subprojects" -name "*.a" \
+            ! -name "libdl.a" ! -name "libmpv.dll.a" 2>/dev/null | sort -u)
 
-          if [ -z "$LINK_LINE" ]; then
-            echo "=== Trying direct approach: find all .a files and link manually ==="
+          echo "Linking $(echo "$ALL_LIBS" | wc -l) static libraries..."
 
-            # Find all static libraries
-            ALL_LIBS=$(find "$prefix_dir/lib" $build subprojects -name "*.a" \
-              ! -name "libdl.a" ! -name "libmpv.dll.a" 2>/dev/null | sort)
-
-            echo "Found $(echo "$ALL_LIBS" | wc -l) static libraries"
-
-            # Create the DLL
-            $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
-              -Wl,--whole-archive $ALL_LIBS -Wl,--no-whole-archive \
-              -Wl,--out-implib=$build/libmpv.dll.a \
-              -Wl,--no-undefined \
-              -Wl,--nxcompat,--no-seh,--dynamicbase \
-              -L"$prefix_dir/lib" \
-              -lstdc++ -lgcc_s \
-              -lws2_32 -lbcrypt -lcrypt32 -lncrypt -lsecur32 \
-              -luser32 -lgdi32 -ladvapi32 -lshell32 -lole32 -loleaut32 \
-              -lshcore -ldwmapi -limm32 -lntdll -lversion -lwinmm \
-              -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid \
-              -lopengl32 -luxtheme -lpathcch -liphlpapi \
-              -Wl,--allow-shlib-undefined 2>&1 || true
-          else
-            echo "=== Modifying link command for DLL ==="
-            echo "Original: ${LINK_LINE:0:200}"
-
-            DLL_CMD=$(echo "$LINK_LINE" | \
-              sed 's|-o mpv\.exe|-o libmpv-2.dll -Wl,--out-implib=libmpv.dll.a|' | \
-              sed 's|--export-dynamic|--export-all-symbols|')
-
-            echo "DLL: ${DLL_CMD:0:200}"
-            eval "$DLL_CMD" 2>&1 || true
-          fi
+          $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
+            -Wl,--whole-archive $ALL_LIBS -Wl,--no-whole-archive \
+            -Wl,--out-implib=$build/libmpv.dll.a \
+            -Wl,--no-undefined \
+            -Wl,--nxcompat,--no-seh,--dynamicbase \
+            -L"$prefix_dir/lib" \
+            -lstdc++ -lgcc_s \
+            -lws2_32 -lbcrypt -lcrypt32 -lncrypt -lsecur32 \
+            -luser32 -lgdi32 -ladvapi32 -lshell32 -lole32 -loleaut32 \
+            -lshcore -ldwmapi -limm32 -lntdll -lversion -lwinmm \
+            -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid \
+            -lopengl32 -luxtheme -lpathcch -liphlpapi \
+            -Wl,--allow-shlib-undefined 2>&1 || true
 
           echo "=== Result ==="
-          ls -lh $build/libmpv-2.dll $build/libmpv.dll.a $build/mpv.exe 2>/dev/null
+          ls -lh $build/libmpv-2.dll $build/libmpv.dll.a $build/mpv.exe
 
-      # Step 3: Create thin mpv.exe launcher
+      # Step 4: Create thin mpv.exe launcher
       - name: Create mpv.exe launcher
         run: |
           prefix_dir=$PWD/mingw_prefix
           build=mingw_build
 
-          echo "=== Creating thin mpv.exe launcher ==="
-
-          cat > /tmp/mpv_launcher.c << 'LAUNCHER_EOF'
+          cat > /tmp/mpv_launcher.c << 'EOF'
           #include <mpv/client.h>
           #include <stdio.h>
-          #include <string.h>
-
           int main(int argc, char *argv[]) {
               mpv_handle *mpv = mpv_create();
-              if (!mpv) {
-                  fprintf(stderr, "Failed to create mpv instance\n");
-                  return 1;
-              }
-
-              // Enable default config
+              if (!mpv) { fprintf(stderr, "mpv_create failed\n"); return 1; }
               mpv_set_option_string(mpv, "config", "yes");
-
-              // Initialize
-              if (mpv_initialize(mpv) < 0) {
-                  fprintf(stderr, "Failed to initialize mpv\n");
-                  mpv_destroy(mpv);
-                  return 1;
-              }
-
-              // Build command from arguments
-              const char **args = (const char **)argv;
-              int count = argc;
-
-              // If files are passed, load them
+              if (mpv_initialize(mpv) < 0) { mpv_destroy(mpv); return 1; }
+              for (int i = 1; i < argc; i++)
+                  mpv_command(mpv, (const char *[]){"loadfile", argv[i], "append", NULL});
               if (argc > 1) {
-                  for (int i = 1; i < argc; i++) {
-                      mpv_command(mpv, (const char *[]){"loadfile", argv[i], "append", NULL});
-                  }
-                  // Set playlist position to first item
-                  mpv_set_property(mpv, "playlist-pos-1", MPV_FORMAT_INT64, &(int64_t){1});
+                  int64_t one = 1;
+                  mpv_set_property(mpv, "playlist-pos-1", MPV_FORMAT_INT64, &one);
               }
-
-              // Main loop
-              mpv_wait_event(mpv, -1);
-
+              while (mpv_wait_event(mpv, -1)->event_id != MPV_EVENT_SHUTDOWN);
               mpv_destroy(mpv);
               return 0;
           }
-          LAUNCHER_EOF
+          EOF
 
-          # Compile the thin launcher
           $TARGET-gcc-posix -O2 -o $build/mpv.exe /tmp/mpv_launcher.c \
             -I"$prefix_dir/include" -I"$PWD/include" \
             -L"$build" -lmpv \
             -Wl,--nxcompat,--no-seh,--dynamicbase \
             -Wl,--subsystem,windows \
-            -Wl,--no-undefined \
             -lkernel32 -luser32
 
-          echo "=== Final result ==="
-          ls -lh $build/mpv.exe $build/libmpv-2.dll $build/libmpv.dll.a 2>/dev/null
+          echo "=== Final ==="
+          ls -lh $build/mpv.exe $build/libmpv-2.dll $build/libmpv.dll.a
 
-      # Step 4: Collect artifacts
+      # Step 5: Collect artifacts
       - name: Collect artifacts
         run: |
           build=mingw_build
@@ -241,7 +209,7 @@ jobs:
           mkdir -p release/${{ matrix.arch }}/include/mpv
           cp -v include/mpv/*.h release/${{ matrix.arch }}/include/mpv/
 
-          echo "=== Final release contents ==="
+          echo "=== Final release ==="
           ls -lh release/${{ matrix.arch }}/
 
       - name: Save ccache
@@ -249,18 +217,7 @@ jobs:
         if: always()
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
-
-      - name: Wait for cache
-        if: always()
-        run: sleep 5
-
-      - name: Save dependencies cache
-        uses: actions/cache/save@v5
-        if: always()
-        with:
-          path: ${{ github.workspace }}/mingw_prefix
-          key: deps-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}-static
 
       - uses: actions/upload-artifact@v7
         with:
