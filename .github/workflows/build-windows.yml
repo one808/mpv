@@ -180,8 +180,12 @@ jobs:
           echo "cpu = '${TARGET%%-*}'" >> "$prefix_dir/crossfile"
           echo "endian = 'little'" >> "$prefix_dir/crossfile"
           $TARGET-ar rcs "$prefix_dir/lib/libdl.a" 2>/dev/null || true
-          # Also put libdl.a where gcc searches for -l flags
-          ln -sf "$prefix_dir/lib/libdl.a" "/usr/$TARGET/lib/libdl.a" 2>/dev/null || true
+          # Create empty libdl.a for luajit's dl dependency
+          echo "" | $TARGET-gcc -x c -c - -o /tmp/empty.o 2>/dev/null || true
+          $TARGET-ar rcs "$prefix_dir/lib/libdl.a" /tmp/empty.o 2>/dev/null || true
+          # Also put in system location
+          mkdir -p /usr/$TARGET/lib
+          cp -f "$prefix_dir/lib/libdl.a" "/usr/$TARGET/lib/libdl.a" 2>/dev/null || true
           ./ci/build-mingw64.sh || true
           echo "=== Static deps: $(find "$prefix_dir/lib" -name '*.a' | wc -l) .a files ==="
 
