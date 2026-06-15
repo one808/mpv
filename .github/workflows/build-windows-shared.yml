@@ -105,7 +105,7 @@ jobs:
           echo "=== Build output ==="
           ls -lh $build/libmpv*.a $build/mpv.exe 2>/dev/null
 
-      # Step 2: Create libmpv.dll from static libmpv.a using --whole-archive
+      # Step 2: Create libmpv.dll from static libmpv.a
       - name: Create libmpv.dll from static
         run: |
           prefix_dir=$PWD/mingw_prefix
@@ -113,30 +113,29 @@ jobs:
 
           echo "=== Creating libmpv-2.dll from static libmpv.a ==="
 
-          # Collect all .a files except libdl.a and libmpv.a itself
-          ALL_LIBS=$(find "$prefix_dir/lib" -name "*.a" \
-            ! -name "libdl.a" ! -name "libmpv.a" \
-            ! -name "libmpv.dll.a" 2>/dev/null)
+          # Use pkg-config to get all dependency flags automatically
+          DEPS=$(PKG_CONFIG_SYSROOT_DIR="$prefix_dir" PKG_CONFIG_LIBDIR="$prefix_dir/lib/pkgconfig" \
+            pkg-config --libs --static \
+            libavcodec libavformat libavutil libswresample libswscale libavfilter libavdevice \
+            libass libplacebo libcurl libluajit \
+            2>/dev/null || echo "")
 
-          # Build linker flags from .a files
-          LDFLAGS=""
-          for lib in $ALL_LIBS; do
-            LDFLAGS="$LDFLAGS -Wl,--whole-archive $lib -Wl,--no-whole-archive"
-          done
-
-          $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
-            -Wl,--whole-archive $build/libmpv.a -Wl,--no-whole-archive \
-            $LDFLAGS \
-            -Wl,--out-implib=$build/libmpv.dll.a \
-            -Wl,--no-undefined \
-            -Wl,--nxcompat,--no-seh,--dynamicbase \
-            -L"$prefix_dir/lib" \
-            -lws2_32 -lbcrypt -lcrypt32 -lncrypt -lsecur32 \
+          # Add C++ and Windows system libs
+          EXTRA_LIBS="-lstdc++ -lgcc_s -lws2_32 -lbcrypt -lcrypt32 -lncrypt -lsecur32 \
             -luser32 -lgdi32 -ladvapi32 -lshell32 -lole32 -loleaut32 \
             -lshcore -ldwmapi -limm32 -lntdll -lversion -lwinmm \
             -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid \
-            -lopengl32 -luxtheme -lpathcch -liphlpapi \
-            -lstdc++ -lgcc_s \
+            -lopengl32 -luxtheme -lpathcch -liphlpapi -luuid"
+
+          echo "pkg-config deps: $DEPS"
+
+          $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
+            -Wl,--whole-archive $build/libmpv.a -Wl,--no-whole-archive \
+            -L"$prefix_dir/lib" \
+            $DEPS \
+            $EXTRA_LIBS \
+            -Wl,--no-undefined \
+            -Wl,--nxcompat,--no-seh,--dynamicbase \
             -Wl,--allow-shlib-undefined 2>&1 || true
 
           echo "=== Result ==="
