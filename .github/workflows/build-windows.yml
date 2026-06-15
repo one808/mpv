@@ -75,6 +75,10 @@ jobs:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
 
+      - name: Wait for cache
+        if: always()
+        run: sleep 5
+
       - name: Save dependencies cache
         uses: actions/cache/save@v5
         if: always()
