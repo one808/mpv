@@ -218,9 +218,16 @@ jobs:
       - name: Create libmpv-2.dll
         run: |
           prefix_dir=$PWD/mingw_prefix; build=mingw_build
+          # Exclude duplicate libs that are already in libshaderc_combined.a
           ALL_LIBS=$(find "$prefix_dir/lib" "$build" "subprojects" -name "*.a" \
             ! -name "libdl.a" ! -name "libmpv.dll.a" ! -name "*.dll.a" \
-            ! -name "libshaderc.a" 2>/dev/null | sort -u)
+            ! -name "libshaderc.a" ! -name "libglslang.a" ! -name "libSPIRV*.a" \
+            ! -name "libglslang-*.a" ! -name "libSPIRV-*.a" \
+            ! -name "libHLSL*.a" ! -name "libMachineIndependent*.a" \
+            ! -name "libOSDependent*.a" ! -name "libGenericCodeGen*.a" \
+            ! -name "libOGLCompiler*.a" ! -name "libStandAlone*.a" \
+            ! -name "lib spirv-cross*.a" \
+            2>/dev/null | sort -u)
           echo "Linking $(echo "$ALL_LIBS" | wc -l) static libraries..."
           $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
             -Wl,--whole-archive $ALL_LIBS -Wl,--no-whole-archive \
