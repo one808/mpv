@@ -66,24 +66,14 @@ jobs:
           meson wrap install mujs
           meson subprojects download
 
-      # Step 1: Build dependencies as static libraries
-      - name: Build dependencies (static)
+      # Step 1: Build ALL as static (dependencies + libmpv)
+      - name: Build all static
         run: |
-          # Temporarily set crossfile to static for dependency build
           prefix_dir=$PWD/mingw_prefix
-          if [ -f "$prefix_dir/crossfile" ]; then
-            sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile"
-          fi
-          ./ci/build-mingw64.sh
+          # Ensure crossfile uses static
+          sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile" 2>/dev/null || true
           # Create empty libdl.a for luajit
           $TARGET-ar rcs "$prefix_dir/lib/libdl.a" 2>/dev/null || true
-
-      # Step 2: Restore crossfile to shared, build mpv with libmpv
-      - name: Build mpv with libmpv (shared DLL, static deps)
-        run: |
-          prefix_dir=$PWD/mingw_prefix
-          # Restore crossfile to shared for libmpv.dll build
-          sed -i "s/default_library = 'static'/default_library = 'shared'/" "$prefix_dir/crossfile"
 
           export CC=$TARGET-gcc-posix
           export CXX=$TARGET-g++-posix
@@ -98,8 +88,6 @@ jobs:
           build=mingw_build
           rm -rf $build
 
-          # Dependencies are already static .a files in prefix_dir/lib/
-          # libmpv will be built as shared DLL, linking against those static deps
           mpv_args=(
             --cross-file "$prefix_dir/crossfile"
             --buildtype release
@@ -114,27 +102,53 @@ jobs:
           meson setup $build "${mpv_args[@]}"
           meson compile -C $build
 
-      # Step 3: Collect only mpv.exe + libmpv-2.dll + headers
+          echo "=== Build output ==="
+          ls -lh $build/libmpv*.a $build/mpv.exe 2>/dev/null
+
+      # Step 2: Create libmpv.dll from static libmpv.a using --whole-archive
+      - name: Create libmpv.dll from static
+        run: |
+          prefix_dir=$PWD/mingw_prefix
+          build=mingw_build
+          export CC=$TARGET-gcc-posix
+          export CXX=$TARGET-g++-posix
+
+          echo "=== Creating libmpv-2.dll from static libmpv.a ==="
+
+          # Create DLL from libmpv.a with --whole-archive to pull in all symbols
+          $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
+            -Wl,--whole-archive $build/libmpv.a -Wl,--no-whole-archive \
+            -Wl,--out-implib=$build/libmpv.dll.a \
+            -Wl,--no-undefined \
+            -Wl,--nxcompat,--no-seh,--dynamicbase \
+            -L"$prefix_dir/lib" \
+            $(find "$prefix_dir/lib" -name "*.a" ! -name "libdl.a" ! -name "libmpv.a" | sed 's/^/-L/;s|/lib/[^/]*$||' | sort -u | head -1) \
+            -L"$prefix_dir/lib" \
+            $(ls "$prefix_dir/lib/"*.a 2>/dev/null | grep -v libdl | grep -v libmpv | sed 's|.*/||;s|^|-l|;s|\.a$||') \
+            -lws2_32 -lbcrypt -lcrypt32 -lncrypt -lsecur32 \
+            -luser32 -lgdi32 -ladvapi32 -lshell32 -lole32 -loleaut32 \
+            -lshcore -ldwmapi -limm32 -lntdll -lversion -lwinmm \
+            -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid -lbcrypt \
+            -lopengl32 -luxtheme -lpathcch -liphlpapi -ladvapi32 \
+            -Wl,--allow-shlib-undefined 2>&1 || true
+
+          echo "=== Result ==="
+          ls -lh $build/libmpv-2.dll $build/mpv.exe 2>/dev/null
+
+      # Step 3: Collect artifacts
       - name: Collect artifacts
         run: |
           build=mingw_build
           mkdir -p release/${{ matrix.arch }}
 
-          # mpv.exe (links to libmpv-2.dll)
           cp -v $build/mpv.exe release/${{ matrix.arch }}/ 2>/dev/null || true
-
-          # libmpv-2.dll (all deps statically linked inside)
           cp -v $build/libmpv-2.dll release/${{ matrix.arch }}/ 2>/dev/null || true
-
-          # Import library
           cp -v $build/libmpv.dll.a release/${{ matrix.arch }}/ 2>/dev/null || true
 
-          # Headers
           mkdir -p release/${{ matrix.arch }}/include/mpv
           cp -v include/mpv/*.h release/${{ matrix.arch }}/include/mpv/
 
-          # Show what we got
-          echo "=== Release contents ==="
+          echo "=== Final release contents ==="
           ls -lh release/${{ matrix.arch }}/
 
       - name: Save ccache
