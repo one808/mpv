@@ -272,3 +272,4 @@ CROSSEOF
         with:
           name: mpv-static-${{ matrix.arch }}
           path: release/${{ matrix.arch }}/
+
