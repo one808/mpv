@@ -113,33 +113,37 @@ jobs:
 
           echo "=== Creating libmpv-2.dll from static libmpv.a ==="
 
-          # Use pkg-config to get all dependency flags automatically
-          DEPS=$(PKG_CONFIG_SYSROOT_DIR="$prefix_dir" PKG_CONFIG_LIBDIR="$prefix_dir/lib/pkgconfig" \
-            pkg-config --libs --static \
-            libavcodec libavformat libavutil libswresample libswscale libavfilter libavdevice \
-            libass libplacebo libcurl libluajit \
-            2>/dev/null || echo "")
+          # The mpv.exe link command has all the correct -l flags from meson
+          # Extract it from build.ninja - look for the rule that links mpv.exe
+          LINK_LINE=$(grep -o 'x86_64-w64-mingw32-gcc.*-o.*mpv\.exe.*' $build/build.ninja 2>/dev/null | head -1)
 
-          # Add C++ and Windows system libs
-          EXTRA_LIBS="-lstdc++ -lgcc_s -lws2_32 -lbcrypt -lcrypt32 -lncrypt -lsecur32 \
-            -luser32 -lgdi32 -ladvapi32 -lshell32 -lole32 -loleaut32 \
-            -lshcore -ldwmapi -limm32 -lntdll -lversion -lwinmm \
-            -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid \
-            -lopengl32 -luxtheme -lpathcch -liphlpapi -luuid"
+          if [ -z "$LINK_LINE" ]; then
+            echo "ERROR: Could not extract link command from build.ninja"
+            exit 1
+          fi
 
-          echo "pkg-config deps: $DEPS"
+          echo "Original link command (first 300 chars):"
+          echo "${LINK_LINE:0:300}"
 
-          $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
-            -Wl,--whole-archive $build/libmpv.a -Wl,--no-whole-archive \
-            -L"$prefix_dir/lib" \
-            $DEPS \
-            $EXTRA_LIBS \
-            -Wl,--no-undefined \
-            -Wl,--nxcompat,--no-seh,--dynamicbase \
-            -Wl,--allow-shlib-undefined 2>&1 || true
+          # Transform the link command for DLL creation:
+          # 1. Replace -o mpv.exe with -o libmpv-2.dll
+          # 2. Add -shared
+          # 3. Replace --whole-archive/--no-whole-archive (already there from meson)
+          # 4. Add --out-implib for import library
+          DLL_CMD=$(echo "$LINK_LINE" | \
+            sed 's|-o mpv.exe|-o libmpv-2.dll -Wl,--out-implib=libmpv.dll.a|' | \
+            sed 's|--export-dynamic|--export-all-symbols|')
 
+          echo ""
+          echo "DLL link command (first 300 chars):"
+          echo "${DLL_CMD:0:300}"
+
+          # Execute the modified link command
+          eval "$DLL_CMD" 2>&1 || true
+
+          echo ""
           echo "=== Result ==="
-          ls -lh $build/libmpv-2.dll $build/mpv.exe 2>/dev/null
+          ls -lh $build/libmpv-2.dll $build/libmpv.dll.a $build/mpv.exe 2>/dev/null
 
       # Step 3: Collect artifacts
       - name: Collect artifacts
