@@ -1,0 +1,142 @@
+name: Build mpv Shared
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: i686
+            target: i686-w64-mingw32
+            rust_target: i686-pc-windows-gnu
+            wine: wine32
+          - arch: x86_64
+            target: x86_64-w64-mingw32
+            rust_target: x86_64-pc-windows-gnu
+            wine: wine64
+
+    env:
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
+      TARGET: ${{ matrix.target }}
+      RUST_TARGET: ${{ matrix.rust_target }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+          restore-keys: ccache-${{ matrix.arch }}-
+
+      - name: Restore dependencies cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ github.workspace }}/mingw_prefix
+          key: deps-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+          restore-keys: deps-${{ matrix.arch }}-
+
+      - name: Install dependencies
+        run: |
+          rustup target add ${{ matrix.rust_target }}
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            ccache g++-mingw-w64 gcc-multilib python3-pip \
+            nasm ninja-build pkgconf ${{ matrix.wine }} wine
+          python3 -m pip install meson
+
+      - name: Install Meson Wraps
+        run: |
+          mkdir -p subprojects
+          meson wrap install mujs
+          meson subprojects download
+
+      - name: Build dependencies
+        run: ./ci/build-mingw64.sh
+
+      - name: Build mpv with libmpv
+        run: |
+          prefix_dir=$PWD/mingw_prefix
+          export CC=$TARGET-gcc-posix
+          export CXX=$TARGET-g++-posix
+          export AR=$TARGET-ar
+          export NM=$TARGET-nm
+          export RANLIB=$TARGET-ranlib
+          export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
+          export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
+          export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
+          export PKG_CONFIG_LIBDIR="$prefix_dir/lib/pkgconfig"
+
+          build=mingw_build
+          rm -rf $build
+
+          meson setup $build \
+            --cross-file "$prefix_dir/crossfile" \
+            --buildtype release \
+            --force-fallback-for=mujs \
+            -Dmujs:werror=false \
+            -Dmujs:default_library=static \
+            -Dlua=luajit \
+            -Dlibmpv=true \
+            -Ddefault_library=shared \
+            -Dprefer_static=true \
+            -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
+
+          meson compile -C $build
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p release/${{ matrix.arch }}
+          build=mingw_build
+          prefix_dir=$PWD/mingw_prefix
+
+          # mpv.exe + mpv.com
+          cp -v $build/mpv.exe $build/mpv.com release/${{ matrix.arch }}/ 2>/dev/null || true
+
+          # libmpv DLL
+          cp -v $build/libmpv-*.dll release/${{ matrix.arch }}/ 2>/dev/null || true
+
+          # All dependency DLLs from prefix
+          cp -v $prefix_dir/bin/*.dll release/${{ matrix.arch }}/ 2>/dev/null || true
+
+          # Compiler runtime DLLs
+          for f in /usr/lib/gcc/$TARGET/*-posix/*.dll /usr/$TARGET/lib/*.dll; do
+            cp -v "$f" release/${{ matrix.arch }}/ 2>/dev/null || true
+          done
+
+          # Headers
+          mkdir -p release/${{ matrix.arch }}/include/mpv
+          cp -v include/mpv/*.h release/${{ matrix.arch }}/include/mpv/
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+
+      - name: Wait for cache
+        if: always()
+        run: sleep 5
+
+      - name: Save dependencies cache
+        uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: ${{ github.workspace }}/mingw_prefix
+          key: deps-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mpv-shared-${{ matrix.arch }}
+          path: release/${{ matrix.arch }}/
