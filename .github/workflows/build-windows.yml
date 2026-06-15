@@ -219,7 +219,8 @@ jobs:
         run: |
           prefix_dir=$PWD/mingw_prefix; build=mingw_build
           ALL_LIBS=$(find "$prefix_dir/lib" "$build" "subprojects" -name "*.a" \
-            ! -name "libdl.a" ! -name "libmpv.dll.a" ! -name "*.dll.a" 2>/dev/null | sort -u)
+            ! -name "libdl.a" ! -name "libmpv.dll.a" ! -name "*.dll.a" \
+            ! -name "libshaderc.a" 2>/dev/null | sort -u)
           echo "Linking $(echo "$ALL_LIBS" | wc -l) static libraries..."
           $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
             -Wl,--whole-archive $ALL_LIBS -Wl,--no-whole-archive \
