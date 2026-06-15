@@ -193,9 +193,9 @@ jobs:
       - name: Build libmpv and mpv
         run: |
           prefix_dir=$PWD/mingw_prefix
-          # Create empty libdl.a where linker can find it
-          mkdir -p /usr/$TARGET/lib
-          cp -f "$prefix_dir/lib/libdl.a" "/usr/$TARGET/lib/libdl.a" 2>/dev/null || true
+          # Create empty libdl.a for luajit - put it where linker can find it
+          echo "" | $TARGET-gcc -x c -c - -o /tmp/empty.o
+          $TARGET-ar rcs "$prefix_dir/lib/libdl.a" /tmp/empty.o
           export CC=$TARGET-gcc-posix
           export CXX=$TARGET-g++-posix
           export AR=$TARGET-ar NM=$TARGET-nm RANLIB=$TARGET-ranlib
