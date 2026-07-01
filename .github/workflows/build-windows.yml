@@ -262,7 +262,8 @@ jobs:
           }
           EOF
           $TARGET-gcc-posix -O2 -o $build/mpv.exe /tmp/mpv_launcher.c \
-            -I"$prefix_dir/include" -I"$PWD/include" -L"$build" -lmpv \
+            -I"$prefix_dir/include" -I"$PWD/include" \
+            -L"$build" $build/libmpv.a \
             -Wl,--nxcompat,--no-seh,--dynamicbase -Wl,--subsystem,windows \
             -lkernel32 -luser32
           echo "=== Final ==="; ls -lh $build/mpv.exe $build/libmpv-2.dll
