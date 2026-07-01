@@ -151,7 +151,7 @@ jobs:
           cpu = '${TARGET%%-*}'
           endian = 'little'
           CROSSEOF
-          $TARGET-ar rcs "$prefix_dir/lib/libdl.a" 2>/dev/null || true
+          mkdir -p "$prefix_dir/lib"
           echo "" | $TARGET-gcc -x c -c - -o /tmp/empty.o 2>/dev/null || true
           $TARGET-ar rcs "$prefix_dir/lib/libdl.a" /tmp/empty.o 2>/dev/null || true
           mkdir -p /usr/$TARGET/lib
@@ -162,6 +162,7 @@ jobs:
       - name: Build libmpv static library
         run: |
           prefix_dir=$PWD/mingw_prefix
+          mkdir -p "$prefix_dir/lib"
           echo "" | $TARGET-gcc -x c -c - -o /tmp/empty.o
           $TARGET-ar rcs "$prefix_dir/lib/libdl.a" /tmp/empty.o
           export CC=$TARGET-gcc-posix
