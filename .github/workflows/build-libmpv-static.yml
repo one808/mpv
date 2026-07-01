@@ -1,4 +1,4 @@
-name: Build static libmpv.dll (single file)
+name: Build static libmpv.dll
 
 on:
   workflow_dispatch:
@@ -42,27 +42,25 @@ jobs:
           meson wrap install mujs
           meson subprojects download
 
-      - name: Build all dependencies as static
+      - name: Build dependencies (both static and shared)
         run: |
-          # Patch all three build systems to produce static libraries
-          sed -i 's/--disable-static --enable-shared/--enable-static --disable-shared/' ci/build-mingw64.sh
-          sed -i "s/default_library = 'shared'/default_library = 'static'/" ci/build-mingw64.sh
-          sed -i 's/-DBUILD_SHARED_LIBS=ON/-DBUILD_SHARED_LIBS=OFF/' ci/build-mingw64.sh
-          # Run WITHOUT || true to see real errors
+          # Enable static libs alongside shared - don't disable shared
+          sed -i 's/--disable-static --enable-shared/--enable-static --enable-shared/' ci/build-mingw64.sh
+          sed -i "s/default_library = 'shared'/default_library = 'both'/" ci/build-mingw64.sh
+          sed -i 's/-DBUILD_SHARED_LIBS=ON/-DBUILD_SHARED_LIBS=ON/' ci/build-mingw64.sh
           ./ci/build-mingw64.sh
 
-      - name: Verify static libraries
+      - name: Verify .a files exist
         run: |
           echo "=== .a files ==="
           find "$PWD/mingw_prefix/lib" -name '*.a' | wc -l
+          find "$PWD/mingw_prefix/lib" -name 'libavcodec*.a' 2>/dev/null || echo "no libavcodec.a"
+          find "$PWD/mingw_prefix/lib" -name 'libass*.a' 2>/dev/null || echo "no libass.a"
           echo "=== .pc files ==="
-          find "$PWD/mingw_prefix" -name '*.pc' | wc -l
-          echo "=== libavcodec ==="
-          find "$PWD/mingw_prefix" -name '*avcodec*' 2>/dev/null | head -10
-          echo "=== .dll.a files ==="
-          find "$PWD/mingw_prefix/lib" -name '*.dll.a' | wc -l
+          find "$PWD/mingw_prefix" -name 'libavcodec*.pc' 2>/dev/null || echo "no libavcodec.pc"
+          find "$PWD/mingw_prefix" -name 'libass*.pc' 2>/dev/null || echo "no libass.pc"
 
-      - name: Build mpv with static deps
+      - name: Build mpv
         run: |
           prefix_dir=$PWD/mingw_prefix
           export CC=$TARGET-gcc-posix
@@ -87,10 +85,12 @@ jobs:
       - name: Create single libmpv-2.dll
         run: |
           prefix_dir=$PWD/mingw_prefix; build=build
+          # Find ALL static .a files (including from meson subprojects)
           ALL_LIBS=$(find "$prefix_dir/lib" "$build" "subprojects" \
             -name "*.a" ! -name "libdl.a" 2>/dev/null | sort -u)
           COUNT=$(echo "$ALL_LIBS" | wc -l)
-          echo "=== Linking $COUNT static libraries into one DLL ==="
+          echo "=== Linking $COUNT static libraries ==="
+          echo "$ALL_LIBS" | head -20
           $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
             -Wl,--whole-archive $ALL_LIBS -Wl,--no-whole-archive \
             -Wl,--output-def,$build/libmpv-2.def \
@@ -108,7 +108,6 @@ jobs:
           echo "=== mpv exports ==="
           grep -c "mpv_" $build/libmpv-2.def || true
           grep "mpv_" $build/libmpv-2.def | head -10 || true
-          # Create clean exports def
           echo "EXPORTS" > $build/mpv_exports.def
           grep "mpv_" $build/libmpv-2.def | sed 's/^ *//' >> $build/mpv_exports.def || true
           wc -l $build/mpv_exports.def
