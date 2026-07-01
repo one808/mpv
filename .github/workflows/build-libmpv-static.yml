@@ -14,10 +14,6 @@ jobs:
             target: i686-w64-mingw32
             rust_target: i686-pc-windows-gnu
             wine: wine32
-          - arch: x86_64
-            target: x86_64-w64-mingw32
-            rust_target: x86_64-pc-windows-gnu
-            wine: wine64
 
     env:
       TARGET: ${{ matrix.target }}
@@ -163,7 +159,7 @@ jobs:
             git clone --depth=1 https://github.com/LuaJIT/LuaJIT.git luajit
           fi
           cd luajit
-          make -j$(nproc) HOST_CC=cc CROSS=$TARGET- \
+          make -j$(nproc) HOST_CC="gcc -m32" CROSS=$TARGET- \
             TARGET_CFLAGS="-O2 -pipe" \
             BUILDMODE=static
           make DESTDIR="$prefix" PREFIX=/usr/local install
