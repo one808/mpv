@@ -54,11 +54,15 @@ jobs:
 
       - name: Build ALL dependencies as static
         run: |
-          # Key fix: force build-mingw64.sh to build static libs
+          # Force ALL build systems to produce static libraries
+          sed -i 's/--disable-static --enable-shared/--enable-static --disable-shared/' ci/build-mingw64.sh
           sed -i "s/default_library = 'shared'/default_library = 'static'/" ci/build-mingw64.sh
+          sed -i 's/-DBUILD_SHARED_LIBS=ON/-DBUILD_SHARED_LIBS=OFF/' ci/build-mingw64.sh
           ./ci/build-mingw64.sh || true
           echo "=== Static .a files: $(find "$PWD/mingw_prefix/lib" -name '*.a' | wc -l) ==="
-          find "$PWD/mingw_prefix/lib" -name '*.a' | head -30
+          echo "=== .pc files: $(find "$PWD/mingw_prefix" -name '*.pc' | wc -l) ==="
+          find "$PWD/mingw_prefix" -name 'libavcodec*.pc' 2>/dev/null || echo "no libavcodec.pc found"
+          find "$PWD/mingw_prefix" -name 'libavcodec*' 2>/dev/null | head -5
 
       - name: Build mpv libmpv
         run: |
