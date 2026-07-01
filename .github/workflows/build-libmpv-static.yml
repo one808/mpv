@@ -137,7 +137,7 @@ jobs:
             cd $builddir
             if [ -f ../../meson.build ]; then
               meson setup .. --cross-file "$prefix/crossfile" \
-                -D{tests,docs}=false -Ddefault_library=static
+                -Ddefault_library=static
               ninja
               DESTDIR="$prefix" ninja install
             else
