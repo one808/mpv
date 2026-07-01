@@ -52,7 +52,7 @@ jobs:
           mkdir -p $prefix/lib $prefix/include
           fam=x86_64
           [[ "$TARGET" == "i686-"* ]] && fam=x86
-          cat > cross.ini <<EOF
+          cat > "$prefix/crossfile" <<EOF
           [built-in options]
           buildtype = 'release'
           default_library = 'static'
@@ -183,7 +183,7 @@ jobs:
           export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig"
           build=build; rm -rf $build
           meson setup $build \
-            --cross-file cross.ini \
+            --cross-file "$prefix/crossfile" \
             --buildtype release \
             --force-fallback-for=mujs \
             -Dmujs:werror=false -Dmujs:default_library=static \
