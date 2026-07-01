@@ -128,29 +128,27 @@ jobs:
           mkdir -p "$prefix_dir"
           fam=x86_64
           [[ "$TARGET" == "i686-"* ]] && fam=x86
-          cat >"$prefix_dir/crossfile" <<CROSSEOF
-          [built-in options]
-          buildtype = 'release'
-          wrap_mode = 'nodownload'
-          default_library = 'static'
-          [binaries]
-          c = ['ccache', '$TARGET-gcc-posix']
-          cpp = ['ccache', '$TARGET-g++-posix']
-          ar = '$TARGET-ar'
-          nm = '$TARGET-nm'
-          strip = '$TARGET-strip'
-          pkgconfig = 'pkg-config'
-          pkg-config = 'pkg-config'
-          windres = '$TARGET-windres'
-          dlltool = '$TARGET-dlltool'
-          nasm = 'nasm'
-          exe_wrapper = 'wine'
-          [host_machine]
-          system = 'windows'
-          cpu_family = '${fam}'
-          cpu = '${TARGET%%-*}'
-          endian = 'little'
-          CROSSEOF
+          echo "[built-in options]" > "$prefix_dir/crossfile"
+          echo "buildtype = 'release'" >> "$prefix_dir/crossfile"
+          echo "wrap_mode = 'nodownload'" >> "$prefix_dir/crossfile"
+          echo "default_library = 'static'" >> "$prefix_dir/crossfile"
+          echo "[binaries]" >> "$prefix_dir/crossfile"
+          echo "c = ['ccache', '$TARGET-gcc-posix']" >> "$prefix_dir/crossfile"
+          echo "cpp = ['ccache', '$TARGET-g++-posix']" >> "$prefix_dir/crossfile"
+          echo "ar = '$TARGET-ar'" >> "$prefix_dir/crossfile"
+          echo "nm = '$TARGET-nm'" >> "$prefix_dir/crossfile"
+          echo "strip = '$TARGET-strip'" >> "$prefix_dir/crossfile"
+          echo "pkgconfig = 'pkg-config'" >> "$prefix_dir/crossfile"
+          echo "pkg-config = 'pkg-config'" >> "$prefix_dir/crossfile"
+          echo "windres = '$TARGET-windres'" >> "$prefix_dir/crossfile"
+          echo "dlltool = '$TARGET-dlltool'" >> "$prefix_dir/crossfile"
+          echo "nasm = 'nasm'" >> "$prefix_dir/crossfile"
+          echo "exe_wrapper = 'wine'" >> "$prefix_dir/crossfile"
+          echo "[host_machine]" >> "$prefix_dir/crossfile"
+          echo "system = 'windows'" >> "$prefix_dir/crossfile"
+          echo "cpu_family = '$fam'" >> "$prefix_dir/crossfile"
+          echo "cpu = '${TARGET%%-*}'" >> "$prefix_dir/crossfile"
+          echo "endian = 'little'" >> "$prefix_dir/crossfile"
           mkdir -p "$prefix_dir/lib"
           echo "" | $TARGET-gcc -x c -c - -o /tmp/empty.o 2>/dev/null || true
           $TARGET-ar rcs "$prefix_dir/lib/libdl.a" /tmp/empty.o 2>/dev/null || true
