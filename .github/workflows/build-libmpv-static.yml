@@ -2,10 +2,6 @@ name: Build static libmpv.dll
 
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - '.github/workflows/build-libmpv-static.yml'
 
 jobs:
   build:
@@ -37,8 +33,8 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-libmpv-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
-          restore-keys: ccache-libmpv-${{ matrix.arch }}-
+          key: ccache-libmpv3-${{ matrix.arch }}
+          restore-keys: ccache-libmpv3-${{ matrix.arch }}-
 
       - name: Install dependencies
         run: |
@@ -50,127 +46,31 @@ jobs:
             nasm ninja-build pkgconf ${{ matrix.wine }} wine
           python3 -m pip install meson
 
-      - name: Fix Wine 32-bit DLLs
-        if: matrix.arch == 'i686'
-        run: echo "WINEPATH=/usr/i686-w64-mingw32/lib;/usr/lib/gcc/i686-w64-mingw32/13-posix" >> $GITHUB_ENV
-
       - name: Install Meson Wraps
         run: |
           mkdir -p subprojects
           meson wrap install mujs
           meson subprojects download
 
-      - name: Create exports definition file
+      - name: Build ALL dependencies as static
         run: |
-          cat > libmpv.exports << 'EOF'
-          EXPORTS
-          mpv_abort_async_command
-          mpv_client_api_version
-          mpv_client_id
-          mpv_client_name
-          mpv_command
-          mpv_command_async
-          mpv_command_node
-          mpv_command_node_async
-          mpv_command_ret
-          mpv_command_string
-          mpv_create
-          mpv_create_client
-          mpv_create_weak_client
-          mpv_del_property
-          mpv_destroy
-          mpv_error_string
-          mpv_event_name
-          mpv_event_to_node
-          mpv_free
-          mpv_free_node_contents
-          mpv_get_property
-          mpv_get_property_async
-          mpv_get_property_osd_string
-          mpv_get_property_string
-          mpv_get_time_ns
-          mpv_get_time_us
-          mpv_get_wakeup_pipe
-          mpv_hook_add
-          mpv_hook_continue
-          mpv_initialize
-          mpv_load_config_file
-          mpv_observe_property
-          mpv_render_context_create
-          mpv_render_context_free
-          mpv_render_context_get_info
-          mpv_render_context_render
-          mpv_render_context_report_swap
-          mpv_render_context_set_parameter
-          mpv_render_context_set_update_callback
-          mpv_render_context_update
-          mpv_request_event
-          mpv_request_log_messages
-          mpv_set_option
-          mpv_set_option_string
-          mpv_set_property
-          mpv_set_property_async
-          mpv_set_property_string
-          mpv_set_wakeup_callback
-          mpv_stream_cb_add_ro
-          mpv_terminate_destroy
-          mpv_unobserve_property
-          mpv_wait_async_requests
-          mpv_wait_event
-          mpv_wakeup
-          EOF
-
-      - name: Build static dependencies
-        run: |
-          set -e
-          prefix_dir=$PWD/mingw_prefix
-          rm -rf "$prefix_dir"
-          mkdir -p "$prefix_dir"
-          fam=x86_64
-          [[ "$TARGET" == "i686-"* ]] && fam=x86
-          echo "[built-in options]" > "$prefix_dir/crossfile"
-          echo "buildtype = 'release'" >> "$prefix_dir/crossfile"
-          echo "wrap_mode = 'nodownload'" >> "$prefix_dir/crossfile"
-          echo "default_library = 'static'" >> "$prefix_dir/crossfile"
-          echo "[binaries]" >> "$prefix_dir/crossfile"
-          echo "c = ['ccache', '$TARGET-gcc-posix']" >> "$prefix_dir/crossfile"
-          echo "cpp = ['ccache', '$TARGET-g++-posix']" >> "$prefix_dir/crossfile"
-          echo "ar = '$TARGET-ar'" >> "$prefix_dir/crossfile"
-          echo "nm = '$TARGET-nm'" >> "$prefix_dir/crossfile"
-          echo "strip = '$TARGET-strip'" >> "$prefix_dir/crossfile"
-          echo "pkgconfig = 'pkg-config'" >> "$prefix_dir/crossfile"
-          echo "pkg-config = 'pkg-config'" >> "$prefix_dir/crossfile"
-          echo "windres = '$TARGET-windres'" >> "$prefix_dir/crossfile"
-          echo "dlltool = '$TARGET-dlltool'" >> "$prefix_dir/crossfile"
-          echo "nasm = 'nasm'" >> "$prefix_dir/crossfile"
-          echo "exe_wrapper = 'wine'" >> "$prefix_dir/crossfile"
-          echo "[host_machine]" >> "$prefix_dir/crossfile"
-          echo "system = 'windows'" >> "$prefix_dir/crossfile"
-          echo "cpu_family = '$fam'" >> "$prefix_dir/crossfile"
-          echo "cpu = '${TARGET%%-*}'" >> "$prefix_dir/crossfile"
-          echo "endian = 'little'" >> "$prefix_dir/crossfile"
-          mkdir -p "$prefix_dir/lib"
-          echo "" | $TARGET-gcc -x c -c - -o /tmp/empty.o 2>/dev/null || true
-          $TARGET-ar rcs "$prefix_dir/lib/libdl.a" /tmp/empty.o 2>/dev/null || true
-          mkdir -p /usr/$TARGET/lib
-          cp -f "$prefix_dir/lib/libdl.a" "/usr/$TARGET/lib/libdl.a" 2>/dev/null || true
+          # Key fix: force build-mingw64.sh to build static libs
+          sed -i "s/default_library = 'shared'/default_library = 'static'/" ci/build-mingw64.sh
           ./ci/build-mingw64.sh || true
-          echo "=== Static deps: $(find "$prefix_dir/lib" -name '*.a' | wc -l) .a files ==="
+          echo "=== Static .a files: $(find "$PWD/mingw_prefix/lib" -name '*.a' | wc -l) ==="
+          find "$PWD/mingw_prefix/lib" -name '*.a' | head -30
 
-      - name: Build libmpv static library
+      - name: Build mpv libmpv
         run: |
           prefix_dir=$PWD/mingw_prefix
-          mkdir -p "$prefix_dir/lib"
-          echo "" | $TARGET-gcc -x c -c - -o /tmp/empty.o
-          $TARGET-ar rcs "$prefix_dir/lib/libdl.a" /tmp/empty.o
           export CC=$TARGET-gcc-posix
           export CXX=$TARGET-g++-posix
           export AR=$TARGET-ar NM=$TARGET-nm RANLIB=$TARGET-ranlib
-          export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
-          export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
+          export CFLAGS="-O2 -pipe -Wall -I$prefix_dir/include"
+          export LDFLAGS="-fstack-protector-strong -L$prefix_dir/lib"
           export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
           export PKG_CONFIG_LIBDIR="$prefix_dir/lib/pkgconfig"
-          build=libmpv_build; rm -rf $build
+          build=build; rm -rf $build
           meson setup $build \
             --cross-file "$prefix_dir/crossfile" \
             --buildtype release \
@@ -179,68 +79,63 @@ jobs:
             -Dlua=luajit -Dlibmpv=true -Dprefer_static=true \
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
           meson compile -C $build
-          echo "=== Built ==="
+          echo "=== libmpv built ==="
           ls -lh $build/libmpv*.a 2>/dev/null || true
-          ls -lh $build/libmpv*.dll.a 2>/dev/null || true
 
-      - name: Create libmpv-2.dll (static, with exports)
+      - name: Create libmpv-2.dll
         run: |
-          prefix_dir=$PWD/mingw_prefix; build=libmpv_build
-          ALL_LIBS=$(find "$prefix_dir/lib" "$build" "subprojects" -name "*.a" \
-            ! -name "libdl.a" ! -name "libmpv.dll.a" ! -name "*.dll.a" \
-            ! -name "libshaderc.a" ! -name "libglslang.a" ! -name "libSPIRV*.a" \
-            ! -name "libglslang-*.a" ! -name "libSPIRV-*.a" \
-            ! -name "libHLSL*.a" ! -name "libMachineIndependent*.a" \
-            ! -name "libOSDependent*.a" ! -name "libGenericCodeGen*.a" \
-            ! -name "libOGLCompiler*.a" ! -name "libStandAlone*.a" \
-            ! -name "lib spirv-cross*.a" \
-            2>/dev/null | sort -u)
-          echo "Linking $(echo "$ALL_LIBS" | wc -l) static libraries..."
+          prefix_dir=$PWD/mingw_prefix; build=build
+          ALL_LIBS=$(find "$prefix_dir/lib" "$build" "subprojects" \
+            -name "*.a" ! -name "libdl.a" 2>/dev/null | sort -u)
+          COUNT=$(echo "$ALL_LIBS" | wc -l)
+          echo "=== Linking $COUNT static libraries ==="
           $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
             -Wl,--whole-archive $ALL_LIBS -Wl,--no-whole-archive \
             -Wl,--output-def,$build/libmpv-2.def \
             -Wl,--out-implib=$build/libmpv.dll.a \
-            -Wl,--no-undefined -Wl,--nxcompat,--no-seh,--dynamicbase \
-            -L"$prefix_dir/lib" \
+            -Wl,--no-undefined \
+            -Wl,--nxcompat,--no-seh,--dynamicbase \
             -lstdc++ -lgcc_s \
             -lws2_32 -lbcrypt -lcrypt32 -lncrypt -lsecur32 \
             -luser32 -lgdi32 -ladvapi32 -lshell32 -lole32 -loleaut32 \
             -lshcore -ldwmapi -limm32 -lntdll -lversion -lwinmm \
             -lpsapi -luuid -lcomdlg32 -lstrmiids -lmfuuid \
-            -lopengl32 -luxtheme -lpathcch -liphlpapi \
-            -Wl,--allow-shlib-undefined 2>&1 || true
-          echo "=== Generated def file ==="; head -20 $build/libmpv-2.def
+            -lopengl32 -luxtheme -lpathcch -liphlpapi || true
+          echo "=== DLL ==="
+          ls -lh $build/libmpv-2.dll
+          echo "=== mpv exports ==="
+          grep -c "mpv_" $build/libmpv-2.def || true
+          grep "mpv_" $build/libmpv-2.def | head -20 || true
 
-      - name: Create filtered exports DLL
+      - name: Create clean exports def
         run: |
-          build=libmpv_build
-          # Extract only mpv_* symbols from generated def (handle both tab and space indentation)
-          grep -E "^[[:space:]]*mpv_" $build/libmpv-2.def > $build/mpv_clean.def || true
+          build=build
           echo "EXPORTS" > $build/mpv_exports.def
-          cat $build/mpv_clean.def >> $build/mpv_exports.def
-          echo "=== Filtered exports ==="; wc -l $build/mpv_exports.def; head -10 $build/mpv_exports.def
+          grep "mpv_" $build/libmpv-2.def | sed 's/^ *//' >> $build/mpv_exports.def || true
+          echo "=== Exports def ==="
+          wc -l $build/mpv_exports.def
+          head -20 $build/mpv_exports.def
 
       - name: Collect artifacts
         run: |
-          build=libmpv_build; prefix_dir=$PWD/mingw_prefix
+          build=build
           mkdir -p release/${{ matrix.arch }}
-          cp -v $build/libmpv-2.dll release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp -v $build/libmpv.dll.a release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp -v $build/libmpv.a release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp -v $build/mpv_exports.def release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp -v $build/libmpv-2.def release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp $build/libmpv-2.dll release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp $build/libmpv.dll.a release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp $build/libmpv.a release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp $build/mpv_exports.def release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp $build/libmpv-2.def release/${{ matrix.arch }}/ 2>/dev/null || true
           mkdir -p release/${{ matrix.arch }}/include/mpv
-          cp -v include/mpv/*.h release/${{ matrix.arch }}/include/mpv/
-          echo "=== Final release ==="; ls -lh release/${{ matrix.arch }}/
-          # Show file sizes
-          echo "=== DLL size ==="; ls -lh $build/libmpv-2.dll
+          cp include/mpv/*.h release/${{ matrix.arch }}/include/mpv/
+          echo "=== Release ==="
+          ls -lh release/${{ matrix.arch }}/
 
       - name: Save ccache
         uses: actions/cache/save@v5
         if: always()
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-libmpv-${{ matrix.arch }}-${{ hashFiles('ci/build-mingw64.sh') }}
+          key: ccache-libmpv3-${{ matrix.arch }}
 
       - uses: actions/upload-artifact@v7
         with:
