@@ -1,4 +1,4 @@
-name: Build static libmpv.dll
+name: Build libmpv.dll
 
 on:
   workflow_dispatch:
@@ -28,9 +28,8 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
-            g++-mingw-w64 gcc-multilib python3-pip \
-            nasm ninja-build pkgconf ${{ matrix.wine }} wine \
-            gettext autoconf automake libtool
+            ccache g++-mingw-w64 gcc-multilib python3-pip \
+            nasm ninja-build pkgconf ${{ matrix.wine }} wine
           python3 -m pip install meson
 
       - name: Install Meson Wraps
@@ -39,53 +38,20 @@ jobs:
           meson wrap install mujs
           meson subprojects download
 
-      - name: Setup build environment
-        run: |
-          export CC=$TARGET-gcc-posix
-          export CXX=$TARGET-g++-posix
-          export AR=$TARGET-ar NM=$TARGET-nm RANLIB=$TARGET-ranlib
-          prefix=$PWD/deps
-          mkdir -p $prefix/lib $prefix/include
-          fam=x86_64
-          [[ "$TARGET" == "i686-"* ]] && fam=x86
-          cat > "$prefix/crossfile" <<EOF
-          [built-in options]
-          buildtype = 'release'
-          default_library = 'static'
-          [binaries]
-          c = ['$TARGET-gcc-posix']
-          cpp = ['$TARGET-g++-posix']
-          ar = '$TARGET-ar'
-          nm = '$TARGET-nm'
-          strip = '$TARGET-strip'
-          pkgconfig = 'pkg-config'
-          pkg-config = 'pkg-config'
-          windres = '$TARGET-windres'
-          nasm = 'nasm'
-          [host_machine]
-          system = 'windows'
-          cpu_family = '${fam}'
-          cpu = '${TARGET%%-*}'
-          endian = 'little'
-          EOF
-          # Create symlinks for DESTDIR installs
-          ln -snf . "$prefix/usr"
-          ln -snf . "$prefix/local"
+      # Step 1: build-mingw64.sh builds all deps as shared (known working)
+      - name: Build dependencies
+        run: ./ci/build-mingw64.sh || true
 
-      - name: Build ffmpeg (static)
+      # Step 2: Rebuild autotools deps as STATIC from already-downloaded source
+      - name: Rebuild ffmpeg as static
         run: |
-          prefix=$PWD/deps
+          prefix=$PWD/mingw_prefix
           export CC=$TARGET-gcc-posix
           export CXX=$TARGET-g++-posix
-          export AR=$TARGET-ar NM=$TARGET-nm RANLIB=$TARGET-ranlib
-          export CFLAGS="-O2 -pipe -Wall"
-          export LDFLAGS="-fstack-protector-strong"
           export PKG_CONFIG_SYSROOT_DIR="$prefix"
           export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig"
-          if [ ! -d ffmpeg ]; then
-            git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git ffmpeg
-          fi
-          mkdir -p ffmpeg/build && cd ffmpeg/build
+          cd ffmpeg
+          rm -rf build-static; mkdir build-static; cd build-static
           ../configure \
             --target-os=mingw32 --enable-gpl \
             --enable-cross-compile --cross-prefix=$TARGET- --arch=${TARGET%%-*} \
@@ -93,18 +59,17 @@ jobs:
             --enable-static --disable-shared \
             --disable-{doc,programs} \
             --enable-muxer=spdif --enable-encoder=mjpeg,png \
+            --enable-libdav1d \
             --prefix=/usr/local
           make -j$(nproc)
           make DESTDIR="$prefix" install
-          echo "=== ffmpeg .a files ==="
+          cd "$OLDPWD"
+          echo "=== ffmpeg static .a ==="
           find $prefix -name 'libavcodec.a' 2>/dev/null
-          find $prefix -name 'libavformat.a' 2>/dev/null
-          echo "=== ffmpeg .pc files ==="
-          find $prefix -name 'libavcodec.pc' 2>/dev/null
 
-      - name: Build freetype + fribidi + harfbuzz + libass (static via meson)
+      - name: Rebuild libass dependencies as static
         run: |
-          prefix=$PWD/deps
+          prefix=$PWD/mingw_prefix
           export CC=$TARGET-gcc-posix
           export CXX=$TARGET-g++-posix
           export AR=$TARGET-ar NM=$TARGET-nm RANLIB=$TARGET-ranlib
@@ -112,63 +77,42 @@ jobs:
           export LDFLAGS="-fstack-protector-strong -L$prefix/lib"
           export PKG_CONFIG_SYSROOT_DIR="$prefix"
           export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig"
-          for dep in freetype fribidi harfbuzz libass; do
-            if [ ! -d $dep ]; then
-              case $dep in
-                freetype) ver=2.14.3; tarball="https://download.savannah.gnu.org/releases/freetype/freetype-${ver}.tar.xz"; dir="freetype-${ver}" ;;
-                fribidi) ver=1.0.16; tarball="https://github.com/fribidi/fribidi/releases/download/v${ver}/fribidi-${ver}.tar.xz"; dir="fribidi-${ver}" ;;
-                harfbuzz) ver=10.2.0; tarball="https://github.com/harfbuzz/harfbuzz/releases/download/${ver}/harfbuzz-${ver}.tar.xz"; dir="harfbuzz-${ver}" ;;
-                libass) tarball=""; dir="" ;;
-              esac
-              if [ -n "$tarball" ]; then
-                wget -q "$tarball" -O /tmp/${dep}.tar.xz
-                tar xf /tmp/${dep}.tar.xz
-                mv $dir $dep 2>/dev/null || true
-              else
-                git clone --depth=1 https://github.com/libass/libass.git
-              fi
-            fi
-            builddir=${dep}/builddir
-            rm -rf $builddir; mkdir -p $builddir
-            cd $builddir
-            if [ -f ../../meson.build ]; then
+
+          # Rebuild meson-based deps as static (freetype, fribidi, harfbuzz)
+          for dep in freetype fribidi harfbuzz; do
+            srcdir=$(find . -maxdepth 2 -name "$dep-*" -type d | head -1)
+            if [ -d "$srcdir" ]; then
+              builddir="$srcdir/builddir-static"
+              rm -rf "$builddir"; mkdir -p "$builddir"
+              cd "$builddir"
               meson setup .. --cross-file "$prefix/crossfile" \
                 -Ddefault_library=static
               ninja
               DESTDIR="$prefix" ninja install
-            else
-              # libass uses autotools
-              export CFLAGS="$CFLAGS -I$prefix/include"
-              export LDFLAGS="$LDFLAGS -L$prefix/lib"
-              cd ../
-              ./autogen.sh 2>/dev/null || true
-              ./configure --host=$TARGET --enable-static --disable-shared \
-                --prefix=/usr/local PKG_CONFIG_PATH="$prefix/lib/pkgconfig"
-              make -j$(nproc)
-              make DESTDIR="$prefix" install
+              cd "$OLDPWD"
             fi
-            cd "$OLDPWD"
           done
-          echo "=== Static libs ==="
-          find $prefix/lib -name '*.a' | grep -E "freetype|fribidi|harfbuzz|ass" | head -10
 
-      - name: Build luajit (static)
-        run: |
-          prefix=$PWD/deps
-          if [ ! -d luajit ]; then
-            git clone --depth=1 https://github.com/LuaJIT/LuaJIT.git luajit
+          # Rebuild libass as static (autotools)
+          if [ -d "libass" ]; then
+            cd libass
+            ./autogen.sh 2>/dev/null || true
+            ./configure --host=$TARGET --enable-static --disable-shared \
+              --prefix=/usr/local \
+              PKG_CONFIG_PATH="$prefix/lib/pkgconfig" \
+              CFLAGS="-I$prefix/include" LDFLAGS="-L$prefix/lib"
+            make -j$(nproc)
+            make DESTDIR="$prefix" install
+            cd "$OLDPWD"
           fi
-          cd luajit
-          make -j$(nproc) HOST_CC="gcc -m32" CROSS=$TARGET- \
-            TARGET_CFLAGS="-O2 -pipe" \
-            BUILDMODE=static
-          make DESTDIR="$prefix" PREFIX=/usr/local install
-          cd "$OLDPWD"
-          find $prefix -name 'libluajit*' 2>/dev/null | head -5
 
-      - name: Build mpv (static)
+          echo "=== Static .a files ==="
+          find $prefix/lib -name '*.a' | grep -v libdl | head -20
+
+      # Step 3: Build mpv with static deps
+      - name: Build mpv
         run: |
-          prefix=$PWD/deps
+          prefix=$PWD/mingw_prefix
           export CC=$TARGET-gcc-posix
           export CXX=$TARGET-g++-posix
           export AR=$TARGET-ar NM=$TARGET-nm RANLIB=$TARGET-ranlib
@@ -188,14 +132,14 @@ jobs:
           echo "=== Built ==="
           ls -lh $build/libmpv*.a $build/mpv.exe 2>/dev/null || true
 
-      - name: Create single libmpv-2.dll
+      # Step 4: Create single self-contained DLL
+      - name: Create libmpv-2.dll
         run: |
-          prefix=$PWD/deps; build=build
+          prefix=$PWD/mingw_prefix; build=build
           ALL_LIBS=$(find "$prefix/lib" "$build" "subprojects" \
             -name "*.a" ! -name "libdl.a" 2>/dev/null | sort -u)
           COUNT=$(echo "$ALL_LIBS" | wc -l)
           echo "=== Linking $COUNT static libraries ==="
-          echo "$ALL_LIBS" | head -20
           $TARGET-gcc-posix -shared -o $build/libmpv-2.dll \
             -Wl,--whole-archive $ALL_LIBS -Wl,--no-whole-archive \
             -Wl,--output-def,$build/libmpv-2.def \
