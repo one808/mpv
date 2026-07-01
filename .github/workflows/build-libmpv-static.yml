@@ -176,13 +176,14 @@ jobs:
           meson setup $build \
             --cross-file "$prefix_dir/crossfile" \
             --buildtype release \
-            --default-library=static \
             --force-fallback-for=mujs \
             -Dmujs:werror=false -Dmujs:default_library=static \
             -Dlua=luajit -Dlibmpv=true -Dprefer_static=true \
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
           meson compile -C $build
-          echo "=== Built ==="; ls -lh $build/libmpv*.a $build/libmpv*.dll.a 2>/dev/null || true
+          echo "=== Built ==="
+          ls -lh $build/libmpv*.a 2>/dev/null || true
+          ls -lh $build/libmpv*.dll.a 2>/dev/null || true
 
       - name: Create libmpv-2.dll (static, with exports)
         run: |
@@ -215,9 +216,8 @@ jobs:
       - name: Create filtered exports DLL
         run: |
           build=libmpv_build
-          # Extract only mpv_* symbols from generated def
-          grep "^	mpv_" $build/libmpv-2.def > $build/mpv_clean.def || true
-          grep "^	mpv_" $build/libmpv-2.def >> $build/mpv_clean.def || true
+          # Extract only mpv_* symbols from generated def (handle both tab and space indentation)
+          grep -E "^[[:space:]]*mpv_" $build/libmpv-2.def > $build/mpv_clean.def || true
           echo "EXPORTS" > $build/mpv_exports.def
           cat $build/mpv_clean.def >> $build/mpv_exports.def
           echo "=== Filtered exports ==="; wc -l $build/mpv_exports.def; head -10 $build/mpv_exports.def
