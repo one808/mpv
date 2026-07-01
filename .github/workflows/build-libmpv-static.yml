@@ -92,7 +92,7 @@ jobs:
           fi
           mkdir -p ffmpeg/build && cd ffmpeg/build
           ../configure \
-            --host=$TARGET --target-os=mingw32 --enable-gpl \
+            --target-os=mingw32 --enable-gpl \
             --enable-cross-compile --cross-prefix=$TARGET- --arch=${TARGET%%-*} \
             --cc="$TARGET-gcc-posix" --cxx="$TARGET-g++-posix" \
             --enable-static --disable-shared \
