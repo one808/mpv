@@ -176,12 +176,13 @@ jobs:
           meson setup $build \
             --cross-file "$prefix_dir/crossfile" \
             --buildtype release \
+            --default-library=static \
             --force-fallback-for=mujs \
             -Dmujs:werror=false -Dmujs:default_library=static \
             -Dlua=luajit -Dlibmpv=true -Dprefer_static=true \
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
           meson compile -C $build
-          echo "=== Built ==="; ls -lh $build/libmpv*.a
+          echo "=== Built ==="; ls -lh $build/libmpv*.a $build/libmpv*.dll.a 2>/dev/null || true
 
       - name: Create libmpv-2.dll (static, with exports)
         run: |
