@@ -77,7 +77,7 @@ jobs:
           meson setup $build \
             --cross-file "$prefix/crossfile" \
             --buildtype release \
-            -Dwrap_mode=forcefallback \
+            --force-fallback-for=libavcodec,libavformat,libavfilter,libavutil,libswresample,libswscale,libass,libplacebo,freetype2,fribidi,harfbuzz,luajit \
             -Ddefault_library=static \
             -Dlibmpv=true \
             -Dcplayer=false \
