@@ -27,7 +27,7 @@ jobs:
             g++-mingw-w64 gcc-multilib python3-pip \
             nasm ninja-build pkgconf cmake git \
             wine32 wine
-          python3 -m pip install meson
+          python3 -m pip install meson glad2
 
       - name: Update Meson WrapDB
         run: |
