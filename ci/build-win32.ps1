@@ -197,22 +197,10 @@ subrandr_build = custom_target(
   ],
   console: true
 )
-python = find_program('python3')
-subrandr_lib = custom_target(
-  'subrandr-copy',
-  input: subrandr_build,
-  output: 'subrandr.lib',
-  command: [
-    python,
-    '-c',
-    'import shutil; import sys; shutil.copy2(sys.argv[1], sys.argv[2])',
-    meson.current_build_dir() / 'lib' / 'subrandr.lib', '@OUTPUT@'
-  ]
-)
 harfbuzz = dependency('harfbuzz', default_options: ['freetype=enabled'])
 dep = declare_dependency(
   sources: subrandr_build,
-  link_with: subrandr_lib,
+  link_args: [meson.current_build_dir() / 'lib' / 'subrandr.lib'],
   dependencies: [
     harfbuzz,
     # those deps are hardcoded, because parsing rustc native-static-libs, would
