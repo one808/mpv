@@ -33,7 +33,10 @@ jobs:
         run: |
           meson wrap update-db
           mkdir -p subprojects
-          meson wrap install expat harfbuzz libpng zlib
+          meson wrap install expat
+          meson wrap install harfbuzz
+          meson wrap install libpng
+          meson wrap install zlib
 
       - name: Setup cross compilation
         run: |
