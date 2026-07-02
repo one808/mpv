@@ -283,7 +283,7 @@ clone-recursive = true
 
 meson setup build `
     --wrap-mode=forcefallback `
-    -Ddefault_library=static `
+    
     -Dc_args="-I$amfExtractPath" `
     -Dlibmpv=true `
     -Dcplayer=false `
