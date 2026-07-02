@@ -81,6 +81,14 @@ jobs:
           dav1d = dav1d_dep
           EOF
 
+          # dlfcn-win32 wrap (needed by dav1d on Windows)
+          cat > subprojects/dlfcn-win32.wrap <<'EOF'
+          [wrap-git]
+          url = https://github.com/dlfcn-win32/dlfcn-win32
+          revision = master
+          depth = 1
+          EOF
+
           # spirv-cross wrap (cmake method)
           cat > subprojects/spirv-cross-c-shared.wrap <<'EOF'
           [wrap-git]
