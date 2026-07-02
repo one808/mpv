@@ -1,0 +1,115 @@
+name: Build static libmpv.dll (meson subprojects)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: i686
+            target: i686-w64-mingw32
+
+    env:
+      TARGET: ${{ matrix.target }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            g++-mingw-w64 gcc-multilib python3-pip \
+            nasm ninja-build pkgconf wine32 wine
+          python3 -m pip install meson
+
+      - name: Setup cross compilation
+        run: |
+          prefix=$PWD/deps
+          mkdir -p "$prefix"
+          fam=x86_64
+          [[ "$TARGET" == "i686-"* ]] && fam=x86
+          cat > "$prefix/crossfile" <<EOF
+          [built-in options]
+          buildtype = 'release'
+          default_library = 'static'
+          [binaries]
+          c = ['$TARGET-gcc-posix']
+          cpp = ['$TARGET-g++-posix']
+          ar = '$TARGET-ar'
+          nm = '$TARGET-nm'
+          strip = '$TARGET-strip'
+          pkgconfig = 'pkg-config'
+          pkg-config = 'pkg-config'
+          windres = '$TARGET-windres'
+          nasm = 'nasm'
+          [host_machine]
+          system = 'windows'
+          cpu_family = '${fam}'
+          cpu = '${TARGET%%-*}'
+          endian = 'little'
+          EOF
+
+      - name: Build mpv with static deps from source
+        run: |
+          prefix=$PWD/deps
+          export CC=$TARGET-gcc-posix
+          export CXX=$TARGET-g++-posix
+          export AR=$TARGET-ar NM=$TARGET-nm RANLIB=$TARGET-ranlib
+          export CFLAGS="-O2 -pipe -Wall"
+          export LDFLAGS="-fstack-protector-strong"
+
+          build=build; rm -rf $build
+          meson setup $build \
+            --cross-file "$prefix/crossfile" \
+            --buildtype release \
+            -Dwrap_mode=forcefallback \
+            -Ddefault_library=static \
+            -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled \
+            -Dlibmpv=true \
+            -Dcplayer=false \
+            -D{drm,wayland,x11}=disabled
+          meson compile -C $build
+
+          echo "=== Build output ==="
+          ls -lh $build/libmpv*.{a,dll,dll.a} 2>/dev/null || true
+          ls -lh $build/mpv.exe 2>/dev/null || true
+
+      - name: Verify static linking
+        run: |
+          build=build
+          echo "=== DLL size ==="
+          ls -lh $build/libmpv-2.dll 2>/dev/null || true
+          echo "=== External DLL deps check ==="
+          $TARGET-objdump -p $build/libmpv-2.dll 2>/dev/null | grep "DLL Name" || true
+
+      - name: Create exports def
+        run: |
+          build=build
+          echo "EXPORTS" > $build/mpv_exports.def
+          $TARGET-nm $build/libmpv.a 2>/dev/null | grep " T " | awk '{print $3}' | grep "^mpv_" | sort -u >> $build/mpv_exports.def || true
+          echo "=== Exports ==="
+          cat $build/mpv_exports.def
+
+      - name: Collect artifacts
+        run: |
+          build=build
+          mkdir -p release/${{ matrix.arch }}
+          cp $build/libmpv-2.dll release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp $build/libmpv.dll.a release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp $build/libmpv.a release/${{ matrix.arch }}/ 2>/dev/null || true
+          cp $build/mpv_exports.def release/${{ matrix.arch }}/ 2>/dev/null || true
+          mkdir -p release/${{ matrix.arch }}/include/mpv
+          cp include/mpv/*.h release/${{ matrix.arch }}/include/mpv/
+          echo "=== Release ==="
+          ls -lh release/${{ matrix.arch }}/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: libmpv-static-${{ matrix.arch }}
+          path: release/${{ matrix.arch }}/
