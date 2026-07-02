@@ -81,7 +81,7 @@ jobs:
           dav1d = dav1d_dep
           EOF
 
-          # spirv-cross wrap
+          # spirv-cross wrap (cmake method)
           cat > subprojects/spirv-cross-c-shared.wrap <<'EOF'
           [wrap-git]
           url = https://github.com/KhronosGroup/SPIRV-Cross
@@ -90,7 +90,7 @@ jobs:
           method = cmake
           EOF
 
-          # vulkan-loader wrap
+          # vulkan-loader wrap (cmake method)
           cat > subprojects/vulkan-loader.wrap <<'EOF'
           [wrap-git]
           url = https://github.com/KhronosGroup/Vulkan-Loader
@@ -99,25 +99,77 @@ jobs:
           method = cmake
           EOF
 
-          # libjxl wrap
-          cat > subprojects/libjxl-cmake.wrap <<'EOF'
-          [wrap-git]
-          url = https://github.com/libjxl/libjxl
-          revision = main
-          depth = 1
-          clone-recursive = true
-          EOF
+          # shaderc: custom meson.build wrapping cmake subproject
+          if [ ! -d subprojects/shaderc_cmake ]; then
+            git clone --depth=1 https://github.com/google/shaderc subprojects/shaderc_cmake
+            cd subprojects/shaderc_cmake
+            ./utils/git-sync-deps
+            cd ../..
+          fi
+          mkdir -p subprojects/shaderc
+          cat > subprojects/shaderc/meson.build <<'MESONEOF'
+          project('shaderc', 'cpp', version: '2024.1')
+          cmake = import('cmake')
+          opts = cmake.subproject_options()
+          opts.add_cmake_defines({
+              'SHADERC_SKIP_INSTALL': 'ON',
+              'SHADERC_SKIP_TESTS': 'ON',
+              'SHADERC_SKIP_EXAMPLES': 'ON',
+              'SHADERC_SKIP_COPYRIGHT_CHECK': 'ON'
+          })
+          shaderc_proj = cmake.subproject('shaderc_cmake', options: opts)
+          shaderc_dep = declare_dependency(dependencies: [
+              shaderc_proj.dependency('shaderc'),
+              shaderc_proj.dependency('shaderc_util'),
+              shaderc_proj.dependency('SPIRV-Tools-static'),
+              shaderc_proj.dependency('SPIRV-Tools-opt'),
+              shaderc_proj.dependency('glslang'),
+          ])
+          meson.override_dependency('shaderc', shaderc_dep)
+          MESONEOF
 
-          # aom wrap (disabled for now, cmake cross-compile issues)
-          # cat > subprojects/aom-cmake.wrap <<'EOF'
-          # [wrap-git]
-          # url = https://aomedia.googlesource.com/aom
-          # revision = main
-          # depth = 1
-          # clone-recursive = true
-          # EOF
+          # spirv-cross: custom meson.build
+          mkdir -p subprojects/spirv-cross-c-shared
+          cat > subprojects/spirv-cross-c-shared/meson.build <<'MESONEOF'
+          project('spirv-cross', 'cpp', version: '0.59.0')
+          cmake = import('cmake')
+          opts = cmake.subproject_options()
+          opts.add_cmake_defines({
+              'SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS': 'ON',
+              'SPIRV_CROSS_CLI': 'OFF',
+              'SPIRV_CROSS_ENABLE_TESTS': 'OFF',
+              'SPIRV_CROSS_ENABLE_MSL': 'OFF',
+              'SPIRV_CROSS_ENABLE_CPP': 'OFF',
+              'SPIRV_CROSS_ENABLE_REFLECT': 'OFF',
+              'SPIRV_CROSS_ENABLE_UTIL': 'OFF',
+          })
+          spirv_cross_proj = cmake.subproject('spirv-cross', options: opts)
+          spirv_cross_c_dep = declare_dependency(dependencies: [
+              spirv_cross_proj.dependency('spirv-cross-c'),
+              spirv_cross_proj.dependency('spirv-cross-core'),
+              spirv_cross_proj.dependency('spirv-cross-glsl'),
+              spirv_cross_proj.dependency('spirv-cross-hlsl'),
+          ])
+          meson.override_dependency('spirv-cross-c-shared', spirv_cross_c_dep)
+          MESONEOF
 
-          ls subprojects/*.wrap
+          # vulkan-loader: custom meson.build
+          mkdir -p subprojects/vulkan
+          cat > subprojects/vulkan/meson.build <<'MESONEOF'
+          project('vulkan', 'cpp', version: '1.3.285')
+          cmake = import('cmake')
+          opts = cmake.subproject_options()
+          opts.add_cmake_defines({
+              'UPDATE_DEPS': 'ON',
+              'USE_GAS': 'ON',
+          })
+          vulkan_proj = cmake.subproject('vulkan-loader', options: opts)
+          vulkan_dep = vulkan_proj.dependency('vulkan')
+          meson.override_dependency('vulkan', vulkan_dep)
+          MESONEOF
+
+          echo "=== Created files ==="
+          ls -la subprojects/
 
       - name: Setup cross compilation
         run: |
