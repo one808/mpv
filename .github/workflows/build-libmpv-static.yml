@@ -108,14 +108,14 @@ jobs:
           clone-recursive = true
           EOF
 
-          # aom wrap
-          cat > subprojects/aom-cmake.wrap <<'EOF'
-          [wrap-git]
-          url = https://aomedia.googlesource.com/aom
-          revision = main
-          depth = 1
-          clone-recursive = true
-          EOF
+          # aom wrap (disabled for now, cmake cross-compile issues)
+          # cat > subprojects/aom-cmake.wrap <<'EOF'
+          # [wrap-git]
+          # url = https://aomedia.googlesource.com/aom
+          # revision = main
+          # depth = 1
+          # clone-recursive = true
+          # EOF
 
           ls subprojects/*.wrap
 
@@ -170,7 +170,8 @@ jobs:
             -Dffmpeg:sdl2=disabled \
             -Dffmpeg:vulkan=auto \
             -Dffmpeg:libdav1d=enabled \
-            -Dffmpeg:libaom=enabled \
+            -Dffmpeg:libaom=disabled \
+            -Dffmpeg:libjxl=disabled \
             -Dharfbuzz:freetype=enabled \
             -Dlcms2:fastfloat=true \
             -Dlcms2:jpeg=disabled \
