@@ -5,29 +5,37 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: windows-2025-vs2026
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: x86_64
-            target: x86_64-w64-mingw32
+          - arch: x64
 
     env:
-      TARGET: ${{ matrix.target }}
+      CC: "ccache clang"
+      CXX: "ccache clang++"
+      CC_LD: "lld-link"
+      CXX_LD: "lld-link"
+      RUST_LD: "lld-link"
+      WINDRES: "llvm-rc"
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_DIR: "${{ github.workspace }}\\.ccache"
+      CCACHE_MAXSIZE: 500M
 
     steps:
-      - uses: actions/checkout@v5
+      - name: Disable autocrlf
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            g++-mingw-w64 gcc-multilib python3-pip \
-            nasm ninja-build pkgconf cmake git \
-            wine32 wine
-          python3 -m pip install meson glad2
+          python -m pip install meson glad2
+          winget install --accept-source-agreements --accept-package-agreements Ccache.Ccache NASM.NASM
+          echo "$env:LOCALAPPDATA\Microsoft\WinGet\Links" >> $env:GITHUB_PATH
 
       - name: Update Meson WrapDB
         run: |
@@ -37,252 +45,100 @@ jobs:
           meson wrap install libpng
           meson wrap install zlib
 
-      - name: Create subproject wraps (from build-win32.ps1)
+      - name: Find Visual Studio
         run: |
-          mkdir -p subprojects
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsPath) { throw "Could not find a Visual Studio installation" }
+          "VS=$vsPath" >> $env:GITHUB_ENV
 
-          # ffmpeg wrap
-          cat > subprojects/ffmpeg.wrap <<'EOF'
-          [wrap-git]
-          url = https://gitlab.freedesktop.org/gstreamer/meson-ports/ffmpeg.git
-          revision = meson-8.1
-          depth = 1
-          clone-recursive = true
-
-          [provide]
-          dependency_names = libavcodec, libavdevice, libavfilter, libavformat, libavutil, libswresample, libswscale
-          program_names = ffmpeg
-          EOF
-
-          # libass wrap
-          cat > subprojects/libass.wrap <<'EOF'
-          [wrap-git]
-          url = https://github.com/libass/libass
-          revision = master
-          depth = 1
-          EOF
-
-          # libplacebo wrap
-          cat > subprojects/libplacebo.wrap <<'EOF'
-          [wrap-git]
-          url = https://code.videolan.org/videolan/libplacebo.git
-          revision = master
-          depth = 1
-          EOF
-
-          # dav1d wrap
-          cat > subprojects/dav1d.wrap <<'EOF'
-          [wrap-git]
-          url = https://code.videolan.org/videolan/dav1d
-          revision = master
-          depth = 1
-
-          [provide]
-          dav1d = dav1d_dep
-          EOF
-
-          # dlfcn-win32 wrap (needed by dav1d on Windows)
-          cat > subprojects/dlfcn-win32.wrap <<'EOF'
-          [wrap-git]
-          url = https://github.com/dlfcn-win32/dlfcn-win32
-          revision = master
-          depth = 1
-          EOF
-
-          # spirv-cross wrap (cmake method)
-          cat > subprojects/spirv-cross-c-shared.wrap <<'EOF'
-          [wrap-git]
-          url = https://github.com/KhronosGroup/SPIRV-Cross
-          revision = main
-          depth = 1
-          method = cmake
-          EOF
-
-          # vulkan-loader wrap (cmake method)
-          cat > subprojects/vulkan-loader.wrap <<'EOF'
-          [wrap-git]
-          url = https://github.com/KhronosGroup/Vulkan-Loader
-          revision = main
-          depth = 1
-          method = cmake
-          EOF
-
-          # shaderc: custom meson.build wrapping cmake subproject
-          if [ ! -d subprojects/shaderc_cmake ]; then
-            git clone --depth=1 https://github.com/google/shaderc subprojects/shaderc_cmake
-            cd subprojects/shaderc_cmake
-            ./utils/git-sync-deps
-            cd ../..
-          fi
-          mkdir -p subprojects/shaderc
-          cat > subprojects/shaderc/meson.build <<'MESONEOF'
-          project('shaderc', 'cpp', version: '2024.1')
-          cmake = import('cmake')
-          opts = cmake.subproject_options()
-          opts.add_cmake_defines({
-              'SHADERC_SKIP_INSTALL': 'ON',
-              'SHADERC_SKIP_TESTS': 'ON',
-              'SHADERC_SKIP_EXAMPLES': 'ON',
-              'SHADERC_SKIP_COPYRIGHT_CHECK': 'ON'
-          })
-          shaderc_proj = cmake.subproject('shaderc_cmake', options: opts)
-          shaderc_dep = declare_dependency(dependencies: [
-              shaderc_proj.dependency('shaderc'),
-              shaderc_proj.dependency('shaderc_util'),
-              shaderc_proj.dependency('SPIRV-Tools-static'),
-              shaderc_proj.dependency('SPIRV-Tools-opt'),
-              shaderc_proj.dependency('glslang'),
-          ])
-          meson.override_dependency('shaderc', shaderc_dep)
-          MESONEOF
-
-          # spirv-cross: custom meson.build
-          mkdir -p subprojects/spirv-cross-c-shared
-          cat > subprojects/spirv-cross-c-shared/meson.build <<'MESONEOF'
-          project('spirv-cross', 'cpp', version: '0.59.0')
-          cmake = import('cmake')
-          opts = cmake.subproject_options()
-          opts.add_cmake_defines({
-              'SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS': 'ON',
-              'SPIRV_CROSS_CLI': 'OFF',
-              'SPIRV_CROSS_ENABLE_TESTS': 'OFF',
-              'SPIRV_CROSS_ENABLE_MSL': 'OFF',
-              'SPIRV_CROSS_ENABLE_CPP': 'OFF',
-              'SPIRV_CROSS_ENABLE_REFLECT': 'OFF',
-              'SPIRV_CROSS_ENABLE_UTIL': 'OFF',
-          })
-          spirv_cross_proj = cmake.subproject('spirv-cross', options: opts)
-          spirv_cross_c_dep = declare_dependency(dependencies: [
-              spirv_cross_proj.dependency('spirv-cross-c'),
-              spirv_cross_proj.dependency('spirv-cross-core'),
-              spirv_cross_proj.dependency('spirv-cross-glsl'),
-              spirv_cross_proj.dependency('spirv-cross-hlsl'),
-          ])
-          meson.override_dependency('spirv-cross-c-shared', spirv_cross_c_dep)
-          MESONEOF
-
-          # vulkan-loader: custom meson.build
-          mkdir -p subprojects/vulkan
-          cat > subprojects/vulkan/meson.build <<'MESONEOF'
-          project('vulkan', 'cpp', version: '1.3.285')
-          cmake = import('cmake')
-          opts = cmake.subproject_options()
-          opts.add_cmake_defines({
-              'UPDATE_DEPS': 'ON',
-              'USE_GAS': 'OFF',
-          })
-          vulkan_proj = cmake.subproject('vulkan-loader', options: opts)
-          vulkan_dep = vulkan_proj.dependency('vulkan')
-          meson.override_dependency('vulkan', vulkan_dep)
-          MESONEOF
-
-          echo "=== Created files ==="
-          ls -la subprojects/
-
-      - name: Setup cross compilation
+      - name: Build
+        id: build
         run: |
-          prefix=$PWD/deps
-          mkdir -p "$prefix"
-          fam=x86_64
-          [[ "$TARGET" == "i686-"* ]] && fam=x86
-          cat > "$prefix/crossfile" <<EOF
-          [built-in options]
-          buildtype = 'release'
-          default_library = 'static'
-          [binaries]
-          c = ['$TARGET-gcc-posix']
-          cpp = ['$TARGET-g++-posix']
-          ar = '$TARGET-ar'
-          nm = '$TARGET-nm'
-          strip = '$TARGET-strip'
-          pkgconfig = 'pkg-config'
-          pkg-config = 'pkg-config'
-          windres = '$TARGET-windres'
-          nasm = 'nasm'
-          cmake = '/usr/bin/cmake'
-          [host_machine]
-          system = 'windows'
-          cpu_family = '${fam}'
-          cpu = '${TARGET%%-*}'
-          endian = 'little'
-          EOF
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
+                                                             $_ -ne 'C:\Program Files\CMake\bin' -and `
+                                                             $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
+          $env:PATH += ';C:\Program Files\NASM'
+          Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=${{ matrix.arch }} -host_arch=${{ matrix.arch }}"
 
-      - name: Build mpv with static deps
+          # Setup subprojects from build-win32.ps1 (same as upstream)
+          $subprojects = "subprojects"
+          if (-not (Test-Path $subprojects)) { New-Item -Path $subprojects -ItemType Directory | Out-Null }
+
+          # AMF headers
+          $amfVersion = "1.5.0"
+          $amfUrl = "https://github.com/GPUOpen-LibrariesAndSDKs/AMF/releases/download/v$amfVersion/AMF-headers-v$amfVersion.tar.gz"
+          $amfArchive = "AMF-headers-v$amfVersion.tar.gz"
+          $amfExtractPath = "$subprojects/amf-headers"
+          if (-not (Test-Path $amfArchive)) { Invoke-WebRequest -Uri $amfUrl -OutFile $amfArchive }
+          if (-not (Test-Path "$amfExtractPath/AMF")) {
+            New-Item -Path $amfExtractPath -ItemType Directory -Force | Out-Null
+            tar -xzf $amfArchive --strip-components=1 -C $amfExtractPath
+          }
+          $amfExtractPath = Resolve-Path $amfExtractPath
+
+          # Run the upstream build script (sets up subprojects and builds)
+          ./ci/build-win32.ps1
+
+      - name: Rebuild as libmpv DLL
         run: |
-          prefix=$PWD/deps
-          export CC=$TARGET-gcc-posix
-          export CXX=$TARGET-g++-posix
-          export AR=$TARGET-ar NM=$TARGET-nm RANLIB=$TARGET-ranlib
-          export CFLAGS="-O2 -pipe -Wall"
-          export LDFLAGS="-fstack-protector-strong"
-          export PKG_CONFIG_SYSROOT_DIR="$prefix"
-          export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig"
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
+                                                             $_ -ne 'C:\Program Files\CMake\bin' -and `
+                                                             $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
+          $env:PATH += ';C:\Program Files\NASM'
+          Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=${{ matrix.arch }} -host_arch=${{ matrix.arch }}"
 
-          build=build; rm -rf $build
-          meson setup $build \
-            --cross-file "$prefix/crossfile" \
-            --wrap-mode=forcefallback \
-            -Ddefault_library=static \
-            -Dlibmpv=true \
-            -Dcplayer=false \
-            -Dgpl=true \
-            -Dffmpeg:gpl=enabled \
-            -Dffmpeg:sdl2=disabled \
-            -Dffmpeg:vulkan=auto \
-            -Dffmpeg:libdav1d=enabled \
-            -Dffmpeg:libaom=disabled \
-            -Dffmpeg:libjxl=disabled \
-            -Dharfbuzz:freetype=enabled \
-            -Dlcms2:fastfloat=true \
-            -Dlcms2:jpeg=disabled \
-            -Dlcms2:tiff=disabled \
-            -Dlibass:test=enabled \
-            -Dlibjpeg-turbo:tests=disabled \
-            -Dlibusb:tests=false \
-            -Dlibusb:examples=false \
-            -Dlibplacebo:demos=false \
-            -Dlibplacebo:lcms=enabled \
-            -Dlibplacebo:shaderc=disabled \
-            -Dlibplacebo:tests=false \
-            -Dlibplacebo:vulkan=disabled \
-            -Dlibplacebo:d3d11=disabled \
-            -Dlibpsl:tests=false \
-            -Dlibsndfile:disabled=true \
-            -Dxxhash:inline-all=true \
-            -Dxxhash:cli=false \
-            -Dluajit:amalgam=true \
-            -D{javascript,libcurl}=enabled \
-            -D{shaderc,spirv-cross,vulkan}=disabled \
-            -D{drm,wayland,x11}=disabled
-
-          meson compile -C $build
-
-          echo "=== Build output ==="
-          ls -lh $build/libmpv*.{a,dll,dll.a} 2>/dev/null || true
-          ls -lh $build/mpv.exe 2>/dev/null || true
-
-      - name: Create exports def
-        run: |
-          build=build
-          echo "EXPORTS" > $build/mpv_exports.def
-          $TARGET-nm $build/libmpv.a 2>/dev/null | grep " T " | awk '{print $3}' | grep "^mpv_" | sort -u >> $build/mpv_exports.def || true
-          echo "=== Exports ==="
-          cat $build/mpv_exports.def
-
-      - name: Collect artifacts
-        run: |
-          build=build
-          mkdir -p release/${{ matrix.arch }}
-          cp $build/libmpv-2.dll release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp $build/libmpv.dll.a release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp $build/libmpv.a release/${{ matrix.arch }}/ 2>/dev/null || true
-          cp $build/mpv_exports.def release/${{ matrix.arch }}/ 2>/dev/null || true
-          mkdir -p release/${{ matrix.arch }}/include/mpv
-          cp include/mpv/*.h release/${{ matrix.arch }}/include/mpv/
-          echo "=== Release ==="
-          ls -lh release/${{ matrix.arch }}/
+          # Reconfigure with libmpv=true, cplayer=false
+          $amfExtractPath = (Resolve-Path "subprojects/amf-headers").Path
+          meson setup build --reconfigure --wipe `
+            --wrap-mode=forcefallback `
+            -Ddefault_library=static `
+            -Dc_args="-I$amfExtractPath" `
+            -Dlibmpv=true `
+            -Dcplayer=false `
+            -Dtests=false `
+            -Dgpl=true `
+            -Dffmpeg:gpl=enabled `
+            -Dffmpeg:sdl2=disabled `
+            -Dffmpeg:vulkan=auto `
+            -Dffmpeg:libdav1d=enabled `
+            -Dffmpeg:libjxl=enabled `
+            -Dffmpeg:libaom=enabled `
+            -Dharfbuzz:freetype=enabled `
+            -Dlcms2:fastfloat=true `
+            -Dlcms2:jpeg=disabled `
+            -Dlcms2:tiff=disabled `
+            -Dlibass:test=enabled `
+            -Dlibjpeg-turbo:tests=disabled `
+            -Dlibusb:tests=false `
+            -Dlibusb:examples=false `
+            -Dlibplacebo:demos=false `
+            -Dlibplacebo:lcms=enabled `
+            -Dlibplacebo:shaderc=enabled `
+            -Dlibplacebo:tests=false `
+            -Dlibplacebo:vulkan=enabled `
+            -Dlibplacebo:d3d11=enabled `
+            -Dlibpsl:tests=false `
+            -Dxxhash:inline-all=true `
+            -Dxxhash:cli=false `
+            -Dluajit:amalgam=true `
+            -Damf=enabled `
+            -Dd3d11=enabled `
+            -Djavascript=enabled `
+            -Dlua=luajit `
+            -Ddrm=disabled `
+            -Dlibarchive=disabled `
+            -Drubberband=disabled `
+            -Dwayland=disabled `
+            -Dx11=disabled
+          ninja -C build libmpv-2.dll
 
       - uses: actions/upload-artifact@v7
         with:
           name: libmpv-static-${{ matrix.arch }}
-          path: release/${{ matrix.arch }}/
+          path: |
+            build/libmpv-2.dll
+            build/libmpv*.lib
+            build/libmpv*.a
