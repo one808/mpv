@@ -36,6 +36,7 @@ jobs:
           python -m pip install meson glad2
           winget install --accept-source-agreements --accept-package-agreements Ccache.Ccache NASM.NASM
           echo "$env:LOCALAPPDATA\Microsoft\WinGet\Links" >> $env:GITHUB_PATH
+          rustup default nightly
 
       - name: Update Meson WrapDB
         run: |
