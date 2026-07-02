@@ -29,14 +29,10 @@ jobs:
             wine32 wine
           python3 -m pip install meson
 
-      - name: Update meson wrap database
+      - name: Get ffmpeg source for static build
         run: |
-          meson wrap update-db
           mkdir -p subprojects
-          meson wrap install expat
-          meson wrap install harfbuzz
-          meson wrap install libpng
-          meson wrap install zlib
+          git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git subprojects/ffmpeg
 
       - name: Setup cross compilation
         run: |
@@ -66,7 +62,7 @@ jobs:
           endian = 'little'
           EOF
 
-      - name: Build mpv with static deps from source
+      - name: Build mpv with static deps
         run: |
           prefix=$PWD/deps
           export CC=$TARGET-gcc-posix
