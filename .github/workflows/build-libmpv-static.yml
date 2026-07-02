@@ -242,7 +242,8 @@ jobs:
             -Dxxhash:inline-all=true \
             -Dxxhash:cli=false \
             -Dluajit:amalgam=true \
-            -D{amf,javascript,libcurl}=enabled \
+            -Damf=disabled \
+            -D{javascript,libcurl}=enabled \
             -D{shaderc,spirv-cross,vulkan}=disabled \
             -D{drm,wayland,x11}=disabled
 
