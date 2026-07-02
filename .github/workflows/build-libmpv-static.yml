@@ -25,14 +25,99 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             g++-mingw-w64 gcc-multilib python3-pip \
-            nasm ninja-build pkgconf cmake \
+            nasm ninja-build pkgconf cmake git \
             wine32 wine
           python3 -m pip install meson
 
-      - name: Get ffmpeg source for static build
+      - name: Update Meson WrapDB
+        run: |
+          meson wrap update-db
+          meson wrap install expat
+          meson wrap install harfbuzz
+          meson wrap install libpng
+          meson wrap install zlib
+
+      - name: Create subproject wraps (from build-win32.ps1)
         run: |
           mkdir -p subprojects
-          git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git subprojects/ffmpeg
+
+          # ffmpeg wrap
+          cat > subprojects/ffmpeg.wrap <<'EOF'
+          [wrap-git]
+          url = https://gitlab.freedesktop.org/gstreamer/meson-ports/ffmpeg.git
+          revision = meson-8.1
+          depth = 1
+          clone-recursive = true
+
+          [provide]
+          dependency_names = libavcodec, libavdevice, libavfilter, libavformat, libavutil, libswresample, libswscale
+          program_names = ffmpeg
+          EOF
+
+          # libass wrap
+          cat > subprojects/libass.wrap <<'EOF'
+          [wrap-git]
+          url = https://github.com/libass/libass
+          revision = master
+          depth = 1
+          EOF
+
+          # libplacebo wrap
+          cat > subprojects/libplacebo.wrap <<'EOF'
+          [wrap-git]
+          url = https://code.videolan.org/videolan/libplacebo.git
+          revision = master
+          depth = 1
+          EOF
+
+          # dav1d wrap
+          cat > subprojects/dav1d.wrap <<'EOF'
+          [wrap-git]
+          url = https://code.videolan.org/videolan/dav1d
+          revision = master
+          depth = 1
+
+          [provide]
+          dav1d = dav1d_dep
+          EOF
+
+          # spirv-cross wrap
+          cat > subprojects/spirv-cross-c-shared.wrap <<'EOF'
+          [wrap-git]
+          url = https://github.com/KhronosGroup/SPIRV-Cross
+          revision = main
+          depth = 1
+          method = cmake
+          EOF
+
+          # vulkan-loader wrap
+          cat > subprojects/vulkan-loader.wrap <<'EOF'
+          [wrap-git]
+          url = https://github.com/KhronosGroup/Vulkan-Loader
+          revision = main
+          depth = 1
+          method = cmake
+          EOF
+
+          # libjxl wrap
+          cat > subprojects/libjxl-cmake.wrap <<'EOF'
+          [wrap-git]
+          url = https://github.com/libjxl/libjxl
+          revision = main
+          depth = 1
+          clone-recursive = true
+          EOF
+
+          # aom wrap
+          cat > subprojects/aom-cmake.wrap <<'EOF'
+          [wrap-git]
+          url = https://aomedia.googlesource.com/aom
+          revision = main
+          depth = 1
+          clone-recursive = true
+          EOF
+
+          ls subprojects/*.wrap
 
       - name: Setup cross compilation
         run: |
@@ -76,13 +161,37 @@ jobs:
           build=build; rm -rf $build
           meson setup $build \
             --cross-file "$prefix/crossfile" \
-            --buildtype release \
-            --force-fallback-for=libavcodec,libavformat,libavfilter,libavutil,libswresample,libswscale,libass,libplacebo,freetype2,fribidi,harfbuzz,luajit \
+            --wrap-mode=forcefallback \
             -Ddefault_library=static \
             -Dlibmpv=true \
             -Dcplayer=false \
+            -Dgpl=true \
+            -Dffmpeg:gpl=enabled \
+            -Dffmpeg:sdl2=disabled \
+            -Dffmpeg:vulkan=auto \
+            -Dffmpeg:libdav1d=enabled \
+            -Dffmpeg:libaom=enabled \
+            -Dharfbuzz:freetype=enabled \
+            -Dlcms2:fastfloat=true \
+            -Dlcms2:jpeg=disabled \
+            -Dlcms2:tiff=disabled \
+            -Dlibass:test=enabled \
+            -Dlibjpeg-turbo:tests=disabled \
+            -Dlibusb:tests=false \
+            -Dlibusb:examples=false \
+            -Dlibplacebo:demos=false \
+            -Dlibplacebo:lcms=enabled \
+            -Dlibplacebo:shaderc=enabled \
+            -Dlibplacebo:tests=false \
+            -Dlibplacebo:vulkan=enabled \
+            -Dlibplacebo:d3d11=enabled \
+            -Dlibpsl:tests=false \
+            -Dxxhash:inline-all=true \
+            -Dxxhash:cli=false \
+            -Dluajit:amalgam=true \
             -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled \
             -D{drm,wayland,x11}=disabled
+
           meson compile -C $build
 
           echo "=== Build output ==="
