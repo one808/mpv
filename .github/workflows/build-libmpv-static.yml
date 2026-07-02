@@ -234,15 +234,16 @@ jobs:
             -Dlibusb:examples=false \
             -Dlibplacebo:demos=false \
             -Dlibplacebo:lcms=enabled \
-            -Dlibplacebo:shaderc=enabled \
+            -Dlibplacebo:shaderc=disabled \
             -Dlibplacebo:tests=false \
-            -Dlibplacebo:vulkan=enabled \
-            -Dlibplacebo:d3d11=enabled \
+            -Dlibplacebo:vulkan=disabled \
+            -Dlibplacebo:d3d11=disabled \
             -Dlibpsl:tests=false \
             -Dxxhash:inline-all=true \
             -Dxxhash:cli=false \
             -Dluajit:amalgam=true \
-            -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled \
+            -D{amf,javascript,libcurl}=enabled \
+            -D{shaderc,spirv-cross,vulkan}=disabled \
             -D{drm,wayland,x11}=disabled
 
           meson compile -C $build
