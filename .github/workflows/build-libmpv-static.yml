@@ -247,6 +247,7 @@ jobs:
             -Dlibplacebo:vulkan=disabled \
             -Dlibplacebo:d3d11=disabled \
             -Dlibpsl:tests=false \
+            -Dlibsndfile:disabled=true \
             -Dxxhash:inline-all=true \
             -Dxxhash:cli=false \
             -Dluajit:amalgam=true \
