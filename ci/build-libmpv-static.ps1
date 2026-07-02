@@ -20,7 +20,7 @@ if (-not (Test-Path "$amfExtractPath/AMF")) {
 }
 $amfExtractPath = Resolve-Path $amfExtractPath
 
-# Wrap shaderc to run git-sync-deps and patch unsupported generator expression
+# Wrap shaderc
 if (-not (Test-Path "$subprojects/shaderc_cmake")) {
     git clone https://github.com/google/shaderc --depth 1 $subprojects/shaderc_cmake
     Set-Content -Path "$subprojects/shaderc_cmake/p.diff" -Value @'
@@ -53,10 +53,6 @@ project('shaderc', 'cpp', version: '2024.1')
 python = find_program('python3')
 run_command(python, '../shaderc_cmake/utils/git-sync-deps', check: true)
 
-# Pre-generate build-version.inc for SPIRV-Tools. Meson's cmake module doesn't
-# support CMake's OBJECT_DEPENDS source file property, so the custom command
-# that generates this file is never triggered.
-# https://github.com/mesonbuild/meson/issues/9062
 run_command(python,
     '../shaderc_cmake/third_party/spirv-tools/utils/update_build_version.py',
     '../shaderc_cmake/third_party/spirv-tools/CHANGES',
@@ -84,8 +80,7 @@ shaderc_dep = declare_dependency(dependencies: [
 meson.override_dependency('shaderc', shaderc_dep)
 "@
 
-# Manually wrap spirv-cross for CMAKE_MSVC_RUNTIME_LIBRARY option
-# This also allows us to link statically
+# Manually wrap spirv-cross
 if (-not (Test-Path "$subprojects/spirv-cross-c-shared")) {
     New-Item -Path "$subprojects/spirv-cross-c-shared" -ItemType Directory | Out-Null
 }
@@ -114,7 +109,7 @@ spirv_cross_c_dep = declare_dependency(dependencies: [
 meson.override_dependency('spirv-cross-c-shared', spirv_cross_c_dep)
 "@
 
-# Manually wrap Vulkan-Loader for UPDATE_DEPS option
+# Manually wrap Vulkan-Loader
 if (-not (Test-Path "$subprojects/vulkan")) {
     New-Item -Path "$subprojects/vulkan" -ItemType Directory | Out-Null
 }
@@ -132,7 +127,7 @@ vulkan_dep = vulkan_proj.dependency('vulkan')
 meson.override_dependency('vulkan', vulkan_dep)
 "@
 
-# Manually wrap libjxl for CMAKE_MSVC_RUNTIME_LIBRARY option
+# Manually wrap libjxl
 if (-not (Test-Path "$subprojects/libjxl")) {
     New-Item -Path "$subprojects/libjxl" -ItemType Directory | Out-Null
 }
@@ -177,6 +172,7 @@ aom_dep = aom_proj.dependency('aom')
 meson.override_dependency('aom', aom_dep)
 "@
 
+# subrandr: use link_args instead of link_with to avoid link_whole on static builds
 if (-not (Test-Path "$subprojects/subrandr")) {
     git clone https://github.com/afishhh/subrandr --depth 1 $subprojects/subrandr
     Set-Content -Path "$subprojects/subrandr/meson.build" -Value @"
@@ -197,26 +193,12 @@ subrandr_build = custom_target(
   ],
   console: true
 )
-python = find_program('python3')
-subrandr_lib = custom_target(
-  'subrandr-copy',
-  input: subrandr_build,
-  output: 'subrandr.lib',
-  command: [
-    python,
-    '-c',
-    'import shutil; import sys; shutil.copy2(sys.argv[1], sys.argv[2])',
-    meson.current_build_dir() / 'lib' / 'subrandr.lib', '@OUTPUT@'
-  ]
-)
 harfbuzz = dependency('harfbuzz', default_options: ['freetype=enabled'])
 dep = declare_dependency(
   sources: subrandr_build,
-  link_with: subrandr_lib,
+  link_args: [meson.current_build_dir() / 'lib' / 'subrandr.lib'],
   dependencies: [
     harfbuzz,
-    # those deps are hardcoded, because parsing rustc native-static-libs, would
-    # be lots of code for little benefit, those libs won't really change.
     cc.find_library('dbghelp', required: true),
     cc.find_library('kernel32', required: true),
     cc.find_library('ntdll', required: true),
@@ -303,12 +285,11 @@ meson setup build `
     --wrap-mode=forcefallback `
     -Ddefault_library=static `
     -Dc_args="-I$amfExtractPath" `
-    -Dlibmpv=false `
-    -Dtests=true `
+    -Dlibmpv=true `
+    -Dcplayer=false `
+    -Dtests=false `
     -Dgpl=true `
     -Dffmpeg:gpl=enabled `
-    -Dffmpeg:tests=enabled `
-    -Dffmpeg:programs=enabled `
     -Dffmpeg:sdl2=disabled `
     -Dffmpeg:vulkan=auto `
     -Dffmpeg:libdav1d=enabled `
@@ -344,7 +325,4 @@ meson setup build `
     -Drubberband=disabled `
     -Dwayland=disabled `
     -Dx11=disabled
-ninja -C build mpv.exe mpv.com
-cp ./build/subprojects/vulkan-loader/vulkan.dll ./build/vulkan-1.dll
-cp ./etc/mpv-*.bat ./build
-./build/mpv.com -v --no-config
+ninja -C build libmpv-2.dll
