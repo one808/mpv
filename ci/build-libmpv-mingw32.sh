@@ -171,7 +171,11 @@ meson setup build \
     -Dlibmpv=true -Dcplayer=false -Dtests=false \
     -Dgpl=true -Dlua=luajit \
     -Ddrm=disabled -Dlibarchive=disabled -Drubberband=disabled \
-    -Dwayland=disabled -Dx11=disabled
+    -Dwayland=disabled -Dx11=disabled \
+    -Dlibplacebo=disabled \
+    -Dvulkan=disabled \
+    -Dshaderc=disabled \
+    -Dspirv-cross=disabled
 
 meson compile -C build
 
