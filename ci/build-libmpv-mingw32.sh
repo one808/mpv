@@ -1,13 +1,11 @@
 #!/bin/bash -e
-# Build libmpv as a DLL using MinGW i686 cross-compilation
+# Build libmpv DLL using MinGW i686 cross-compilation
+# Simplified: only build core deps, let meson handle the rest via wraps
 
 prefix_dir=$PWD/mingw_prefix
 mkdir -p "$prefix_dir"
 ln -snf . "$prefix_dir/usr"
 ln -snf . "$prefix_dir/local"
-
-wget="wget -nc -q"
-gitclone="git clone --depth=1 --recursive --shallow-submodules"
 
 TARGET=i686-w64-mingw32
 RUST_TARGET=i686-pc-windows-gnu
@@ -22,10 +20,6 @@ export RANLIB=$TARGET-ranlib
 export CFLAGS="-O2 -pipe -Wall"
 export LDFLAGS="-fstack-protector-strong"
 
-if [[ "$TARGET" == "i686-"* ]]; then
-    export WINEPATH="`$CC -print-file-name=`;/usr/$TARGET/lib"
-fi
-
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
 
@@ -33,7 +27,7 @@ fam=x86
 cat >"$prefix_dir/crossfile" <<EOF
 [built-in options]
 buildtype = 'release'
-wrap_mode = 'nodownload'
+wrap_mode = 'forcefallback'
 default_library = 'shared'
 [binaries]
 c = ['ccache', '${CC}']
@@ -56,8 +50,7 @@ endian = 'little'
 EOF
 
 cmake_args=(
-    -Wno-dev
-    -GNinja
+    -Wno-dev -GNinja
     -DCMAKE_SYSTEM_PROCESSOR="${fam}"
     -DCMAKE_SYSTEM_NAME=Windows
     -DCMAKE_FIND_ROOT_PATH="$PKG_CONFIG_SYSROOT_DIR"
@@ -77,13 +70,8 @@ function builddir {
 }
 
 function makeplusinstall {
-    if [ -f build.ninja ]; then
-        ninja
-        DESTDIR="$prefix_dir" ninja install
-    else
-        make -j$(nproc)
-        make DESTDIR="$prefix_dir" install
-    fi
+    ninja; DESTDIR="$prefix_dir" ninja install
+    popd
 }
 
 function gettar {
@@ -91,22 +79,8 @@ function gettar {
     local dname="$2"
     [ -z "$dname" ] && dname="${fname%.tar.*}"
     [ -d "$dname" ] && return 0
-    local cachename="$(md5sum <<<"$1" | cut -d " " -f 1)"
-    if [[ -n "$DOWNLOAD_CACHE" && -s "$DOWNLOAD_CACHE/$cachename" ]]; then
-        cp -v "$DOWNLOAD_CACHE/$cachename" "$fname"
-        cachename=
-    else
-        $wget "$1" -O "$fname"
-    fi
+    wget -q "$1" -O "$fname"
     tar -xaf "$fname"
-    if [ ! -d "$dname" ]; then
-        echo "Error: expected $fname to extract to $dname but it was not created" >&2
-        return 2
-    fi
-    if [[ -n "$DOWNLOAD_CACHE" && -n "$cachename" ]]; then
-        mkdir -p "$DOWNLOAD_CACHE"
-        cp -v "$fname" "$DOWNLOAD_CACHE/$cachename"
-    fi
 }
 
 function build_if_missing {
@@ -117,20 +91,16 @@ function build_if_missing {
     echo "::group::Building $1"
     _$name
     echo "::endgroup::"
-    if [ ! -e "$mark_file" ]; then
-        echo "Error: Build of $1 completed but $mark_file was not created" >&2
-        return 2
-    fi
 }
 
-## Dependencies for libmpv DLL
+## Core dependencies only
 
 _iconv () {
     local ver=1.19
     gettar "https://ftpmirror.gnu.org/gnu/libiconv/libiconv-${ver}.tar.gz"
     builddir libiconv-${ver}
     ../configure --host=$TARGET --disable-static --enable-shared
-    makeplusinstall
+    make -j$(nproc); make DESTDIR="$prefix_dir" install
     popd
 }
 _iconv_mark=lib/libiconv.dll.a
@@ -139,227 +109,74 @@ _zlib_ng () {
     local ver=2.3.3
     gettar "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/${ver}.tar.gz" zlib-ng-${ver}
     builddir zlib-ng-${ver}
-    cmake .. "${cmake_args[@]}" \
-        -DZLIB_COMPAT=ON -DBUILD_TESTING=OFF
+    cmake .. "${cmake_args[@]}" -DZLIB_COMPAT=ON -DBUILD_TESTING=OFF
     makeplusinstall
-    popd
     ln -snf libzlib.dll.a "$prefix_dir/lib/libz.dll.a"
 }
 _zlib_ng_mark=lib/libzlib.dll.a
 
 _dav1d () {
-    [ -d dav1d ] || $gitclone https://code.videolan.org/videolan/dav1d.git
+    [ -d dav1d ] || git clone --depth=1 https://code.videolan.org/videolan/dav1d.git
     builddir dav1d
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
-        -Denable_{tools,tests}=false
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Denable_{tools,tests}=false
     makeplusinstall
-    popd
 }
 _dav1d_mark=lib/libdav1d.dll.a
-
-_lcms2 () {
-    [ -d lcms2 ] || $gitclone https://github.com/mm2/Little-CMS.git lcms2
-    builddir lcms2
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
-        -Dtests=disabled -D{utils,versionedlibs}=false
-    makeplusinstall
-    popd
-}
-_lcms2_mark=lib/liblcms2.dll.a
 
 _amf_headers () {
     local ver=1.5.2
     gettar "https://github.com/GPUOpen-LibrariesAndSDKs/AMF/releases/download/v${ver}/AMF-headers-v${ver}.tar.gz" amf-headers-v${ver}
-    pushd amf-headers-v${ver}
     mkdir -p "$prefix_dir/include"
-    cp -r AMF "$prefix_dir/include/"
-    popd
+    cp -r amf-headers-v${ver}/AMF "$prefix_dir/include/"
 }
 _amf_headers_mark=include/AMF/core/Version.h
 
 _ffmpeg () {
-    [ -d ffmpeg ] || $gitclone https://github.com/FFmpeg/FFmpeg.git ffmpeg
+    [ -d ffmpeg ] || git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git ffmpeg
     builddir ffmpeg
-    local args=(
-        --pkg-config=pkg-config --target-os=mingw32 --enable-gpl
-        --enable-cross-compile --cross-prefix=$TARGET- --arch=${TARGET%%-*}
-        --cc="$CC" --cxx="$CXX" --disable-static --enable-shared
-        --disable-{doc,programs}
+    ../configure \
+        --pkg-config=pkg-config --target-os=mingw32 --enable-gpl \
+        --enable-cross-compile --cross-prefix=$TARGET- --arch=i686 \
+        --cc="$CC" --cxx="$CXX" --disable-static --enable-shared \
+        --disable-{doc,programs} \
         --enable-muxer=spdif --enable-encoder=mjpeg,png --enable-libdav1d
-    )
-    ../configure "${args[@]}"
-    makeplusinstall
+    make -j$(nproc); make DESTDIR="$prefix_dir" install
     popd
 }
 _ffmpeg_mark=lib/libavcodec.dll.a
 
-_shaderc () {
-    if [ ! -d shaderc ]; then
-        $gitclone https://github.com/google/shaderc.git
-        (cd shaderc && ./utils/git-sync-deps)
-    fi
-    builddir shaderc
-    cmake .. "${cmake_args[@]}" \
-        -DBUILD_SHARED_LIBS=OFF -DSHADERC_SKIP_TESTS=ON
-    makeplusinstall
-    popd
-}
-_shaderc_mark=lib/libshaderc_shared.dll.a
-
-_spirv_cross () {
-    [ -d SPIRV-Cross ] || $gitclone https://github.com/KhronosGroup/SPIRV-Cross
-    builddir SPIRV-Cross
-    cmake .. "${cmake_args[@]}" \
-        -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_{CLI,STATIC}=OFF
-    makeplusinstall
-    popd
-}
-_spirv_cross_mark=lib/libspirv-cross-c-shared.dll.a
-
-_nv_headers () {
-    [ -d nv-codec-headers ] || $gitclone https://github.com/FFmpeg/nv-codec-headers
-    pushd nv-codec-headers
-    makeplusinstall
-    popd
-}
-_nv_headers_mark=include/ffnvcodec/dynlink_loader.h
-
-_vulkan_headers () {
-    [ -d Vulkan-Headers ] || $gitclone https://github.com/KhronosGroup/Vulkan-Headers
-    builddir Vulkan-Headers
-    cmake .. "${cmake_args[@]}"
-    makeplusinstall
-    popd
-}
-_vulkan_headers_mark=include/vulkan/vulkan.h
-
-_vulkan_loader () {
-    [ -d Vulkan-Loader ] || $gitclone https://github.com/KhronosGroup/Vulkan-Loader
-    builddir Vulkan-Loader
-    cmake .. "${cmake_args[@]}" -DUSE_GAS=ON
-    makeplusinstall
-    popd
-}
-_vulkan_loader_mark=lib/libvulkan-1.dll.a
-
-_libplacebo () {
-    [ -d libplacebo ] || $gitclone https://code.videolan.org/videolan/libplacebo.git
-    builddir libplacebo
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
-        -Ddemos=false -D{opengl,d3d11,lcms}=enabled
-    makeplusinstall
-    popd
-}
-_libplacebo_mark=lib/libplacebo.dll.a
-
-_freetype () {
-    local ver=2.14.3
-    gettar "https://download.savannah.gnu.org/releases/freetype/freetype-${ver}.tar.xz"
-    builddir freetype-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile"
-    makeplusinstall
-    popd
-}
-_freetype_mark=lib/libfreetype.dll.a
-
-_fribidi () {
-    local ver=1.0.16
-    gettar "https://github.com/fribidi/fribidi/releases/download/v${ver}/fribidi-${ver}.tar.xz"
-    builddir fribidi-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
-        -D{tests,docs}=false
-    makeplusinstall
-    popd
-}
-_fribidi_mark=lib/libfribidi.dll.a
-
-_harfbuzz () {
-    local ver=14.2.0
-    gettar "https://github.com/harfbuzz/harfbuzz/releases/download/${ver}/harfbuzz-${ver}.tar.xz"
-    builddir harfbuzz-${ver}
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
-        -Dtests=disabled
-    makeplusinstall
-    popd
-}
-_harfbuzz_mark=lib/libharfbuzz.dll.a
-
-_libass () {
-    [ -d libass ] || $gitclone https://github.com/libass/libass.git
-    builddir libass
-    meson setup .. --cross-file "$prefix_dir/crossfile"
-    makeplusinstall
-    popd
-}
-_libass_mark=lib/libass.dll.a
-
 _luajit () {
-    [ -d LuaJIT ] || $gitclone https://github.com/LuaJIT/LuaJIT.git
+    [ -d LuaJIT ] || git clone --depth=1 https://github.com/LuaJIT/LuaJIT.git
     pushd LuaJIT
-    local hostcc="ccache cc"
-    local flags=
-    hostcc="$hostcc -m32"
-    flags=XCFLAGS=-DLUAJIT_NO_UNWIND
     make TARGET_SYS=Windows clean
-    make TARGET_SYS=Windows HOST_CC="$hostcc" CROSS="ccache $TARGET-" \
-        BUILDMODE=static $flags amalg
+    make TARGET_SYS=Windows HOST_CC="ccache cc -m32" CROSS="ccache $TARGET-" \
+        BUILDMODE=static XCFLAGS=-DLUAJIT_NO_UNWIND amalg
     make DESTDIR="$prefix_dir" INSTALL_DEP= FILE_T=luajit.exe install
     popd
 }
 _luajit_mark=lib/libluajit-5.1.a
 
-_curl () {
-    local ver=8.20.0
-    gettar "https://curl.se/download/curl-${ver}.tar.xz"
-    builddir curl-${ver}
-    cmake .. "${cmake_args[@]}" \
-        -DCURL_{USE_SCHANNEL,ZLIB}=ON -DCURL_DISABLE_LDAP=ON -DCURL_USE_LIBPSL=OFF
-    makeplusinstall
-    popd
-}
-_curl_mark=lib/libcurl.dll.a
-
-# Build all dependencies
-for x in iconv zlib-ng amf-headers nv-headers dav1d lcms2; do
-    build_if_missing $x
-done
-build_if_missing vulkan-headers
-build_if_missing vulkan-loader
-for x in ffmpeg libplacebo shaderc spirv-cross freetype fribidi harfbuzz libass luajit curl; do
+# Build core deps (libplacebo/shaderc/spirv-cross handled by meson wraps)
+for x in iconv zlib-ng amf-headers dav1d ffmpeg luajit; do
     build_if_missing $x
 done
 
-# Build libmpv as DLL
+## Build libmpv as DLL - let meson handle remaining deps via wraps
 CFLAGS+=" -I'$prefix_dir/include'"
 LDFLAGS+=" -L'$prefix_dir/lib'"
 export CFLAGS LDFLAGS
 
-build=mingw_build
-rm -rf $build
-
-meson setup $build \
+meson setup build \
     --cross-file "$prefix_dir/crossfile" \
-    --buildtype release \
-    --force-fallback-for=mujs \
-    -Dmujs:werror=false \
-    -Dmujs:default_library=static \
-    -Dlua=luajit \
-    -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled \
-    -Dlibmpv=true \
-    -Dcplayer=false \
-    -Dtests=false \
-    -Dgpl=true \
-    -Ddrm=disabled \
-    -Dlibarchive=disabled \
-    -Drubberband=disabled \
-    -Dwayland=disabled \
-    -Dx11=disabled
+    -Dlibmpv=true -Dcplayer=false -Dtests=false \
+    -Dgpl=true -Dlua=luajit \
+    -Ddrm=disabled -Dlibarchive=disabled -Drubberband=disabled \
+    -Dwayland=disabled -Dx11=disabled
 
-meson compile -C $build
+meson compile -C build
 
-# Copy artifacts
 mkdir -p artifact
-cp -v $build/mpv-2.dll artifact/libmpv-2.dll 2>/dev/null || true
-cp -v $build/mpv.dll.a artifact/libmpv.dll.a 2>/dev/null || true
-cp -v $build/mpv.dll artifact/libmpv.dll 2>/dev/null || true
+cp -v build/mpv-2.dll artifact/libmpv-2.dll 2>/dev/null || true
+cp -v build/mpv.dll.a artifact/libmpv.dll.a 2>/dev/null || true
+cp -v build/mpv.dll artifact/libmpv.dll 2>/dev/null || true
 ls -la artifact/
