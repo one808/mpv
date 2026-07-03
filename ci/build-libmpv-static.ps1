@@ -275,6 +275,11 @@ $projects = @(
         Path = "$subprojects/libpsl.wrap"
         URL = "https://github.com/rockdaboot/libpsl"
         Revision = "master"
+    },
+    @{
+        Path = "$subprojects/uchardet.wrap"
+        URL = "https://github.com/nickolasburr/uchardet"
+        Revision = "master"
     }
 )
 
