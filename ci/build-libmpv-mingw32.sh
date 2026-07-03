@@ -77,11 +77,11 @@ _dav1d_mark=lib/libdav1d.dll.a
 _amf_headers() { local v=1.5.2; gettar "https://github.com/GPUOpen-LibrariesAndSDKs/AMF/releases/download/v${v}/AMF-headers-v${v}.tar.gz" amf-headers-v${v}; mkdir -p "$prefix_dir/include"; cp -r amf-headers-v${v}/AMF "$prefix_dir/include/"; }
 _amf_headers_mark=include/AMF/core/Version.h
 
-_ffmpeg() { [ -d ffmpeg ] || git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git ffmpeg; builddir ffmpeg; ../configure --pkg-config=pkg-config --target-os=mingw32 --enable-gpl --enable-cross-compile --cross-prefix=$TARGET- --arch=i686 --cc="$CC" --cxx="$CXX" --disable-static --enable-shared --disable-{doc,programs} --enable-muxer=spdif --enable-encoder=mjpeg,png --enable-libdav1d; make -j$(nproc); make DESTDIR="$prefix_dir" install; popd; }
+_ffmpeg() { [ -d ffmpeg ] || git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git ffmpeg; builddir ffmpeg; ../configure --pkg-config=pkg-config --target-os=mingw32 --enable-gpl --enable-cross-compile --cross-prefix=$TARGET- --arch=i686 --cc="$CC" --cxx="$CXX" --disable-static --enable-shared --disable-{doc,programs} --enable-muxer=spdif --enable-encoder=mjpeg,png --enable-libdav1d --prefix=/usr; make -j$(nproc); make DESTDIR="$prefix_dir" install; popd; }
 _ffmpeg_mark=lib/libavcodec.dll.a
 
 _spirv_tools() { [ -d SPIRV-Tools ] || git clone --depth=1 https://github.com/KhronosGroup/SPIRV-Tools; builddir SPIRV-Tools; cmake .. "${cmake_args[@]}" -DSPIRV_SKIP_TESTS=ON -DSPIRV_BUILD_FUZZER=OFF; makeplusinstall; }
-_spirv_tools_mark=lib/libSPIRV-Tools.so
+_spirv_tools_mark=lib/libSPIRV-Tools.a
 
 _vulkan_headers() { [ -d Vulkan-Headers ] || git clone --depth=1 https://github.com/KhronosGroup/Vulkan-Headers; builddir Vulkan-Headers; cmake .. "${cmake_args[@]}"; makeplusinstall; }
 _vulkan_headers_mark=include/vulkan/vulkan.h
