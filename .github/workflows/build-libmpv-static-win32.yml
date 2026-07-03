@@ -13,6 +13,12 @@ jobs:
           - arch: x86
 
     env:
+      CC: "ccache clang"
+      CXX: "ccache clang++"
+      CC_LD: "lld-link"
+      CXX_LD: "lld-link"
+      RUST_LD: "lld-link"
+      WINDRES: "llvm-rc"
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_DIR: "${{ github.workspace }}\\.ccache"
       CCACHE_MAXSIZE: 500M
@@ -63,10 +69,9 @@ jobs:
       - name: Build libmpv
         id: build
         run: |
-          # Remove system LLVM and Strawberry from PATH
+          # Remove VS x86 LLVM from PATH (it doesn't exist), keep system LLVM
           $llvmX64 = "$env:VS\VC\Tools\Llvm\x64\bin"
           $env:PATH = ($env:PATH -split ';' | Where-Object { 
-              $_ -ne 'C:\Program Files\LLVM\bin' -and `
               $_ -ne 'C:\Program Files\CMake\bin' -and `
               $_ -ne 'C:\Strawberry\c\bin' -and `
               $_ -ne $llvmX64
@@ -74,12 +79,12 @@ jobs:
           $env:PATH += ';C:\Program Files\NASM'
           Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
           Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=${{ matrix.arch }} -host_arch=${{ matrix.arch }}"
-          # Use VS x86 clang directly (not ccache wrapped)
-          $env:CC = "clang.exe"
-          $env:CXX = "clang++.exe"
-          $env:CC_LD = "lld-link.exe"
-          $env:CXX_LD = "lld-link.exe"
-          $env:WINDRES = "llvm-rc.exe"
+          # Use system LLVM with cross-compilation target
+          $env:CC = "clang --target=i686-pc-windows-msvc"
+          $env:CXX = "clang++ --target=i686-pc-windows-msvc"
+          $env:CC_LD = "lld-link"
+          $env:CXX_LD = "lld-link"
+          $env:WINDRES = "llvm-rc --target=i686-pc-windows-msvc"
           ./ci/build-libmpv-static-win32.ps1
 
       - name: Print build log
