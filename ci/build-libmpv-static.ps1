@@ -301,6 +301,9 @@ clone-recursive = true
     Set-Content -Path $project.Path -Value $content
 }
 
+# Ensure NASM is in PATH for dav1d
+$env:PATH = "C:\Program Files\NASM;" + $env:PATH
+
 meson setup build `
     --wrap-mode=forcefallback `
     -Dc_args="-I$amfExtractPath" `
@@ -313,7 +316,7 @@ meson setup build `
     -Dffmpeg:vulkan=auto `
             -Dffmpeg:libdav1d=enabled `
             -Dffmpeg:libjxl=enabled `
-            -Dffmpeg:libaom=disabled `
+            -Dffmpeg:libaom=enabled `
     -Dharfbuzz:freetype=enabled `
     -Dlcms2:fastfloat=true `
     -Dlcms2:jpeg=disabled `
