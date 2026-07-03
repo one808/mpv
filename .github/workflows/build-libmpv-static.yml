@@ -79,25 +79,14 @@ jobs:
           }
           $amfExtractPath = Resolve-Path $amfExtractPath
 
-          # Run the upstream build script (sets up subprojects and builds)
+          # Patch build-win32.ps1 to build libmpv instead of mpv.exe
+          (Get-Content ci/build-win32.ps1) `
+            -replace '-Dlibmpv=false', '-Dlibmpv=true' `
+            -replace 'ninja -C build mpv.exe mpv.com', 'ninja -C build libmpv-2.dll' |
+            Set-Content ci/build-win32.ps1
+
+          # Run the patched build script
           ./ci/build-win32.ps1
-
-      - name: Rebuild as libmpv DLL
-        run: |
-          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
-                                                             $_ -ne 'C:\Program Files\CMake\bin' -and `
-                                                             $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
-          $env:PATH += ';C:\Program Files\NASM'
-          Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
-          Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=${{ matrix.arch }} -host_arch=${{ matrix.arch }}"
-
-          $amfExtractPath = (Resolve-Path "subprojects/amf-headers").Path
-          meson setup build --reconfigure `
-            -Dlibmpv=true `
-            -Dcplayer=false `
-            -Dtests=false `
-            -Dc_args="-I$amfExtractPath"
-          ninja -C build libmpv-2.dll
 
       - uses: actions/upload-artifact@v7
         with:
