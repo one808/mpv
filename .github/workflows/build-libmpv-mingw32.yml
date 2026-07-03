@@ -1,0 +1,61 @@
+name: Build libmpv DLL (MinGW32)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      TARGET: i686-w64-mingw32
+      RUST_TARGET: i686-pc-windows-gnu
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Get time
+        id: get_time
+        run: echo "timestamp=$(date +%s%N)" >> $GITHUB_OUTPUT
+
+      - name: Restore cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: mingw32-${{ steps.get_time.outputs.timestamp }}
+          restore-keys: mingw32-
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            ccache g++-mingw-w64-i686 gcc-multilib python3-pip \
+            nasm ninja-build pkg-config wine wine32
+          python3 -m pip install meson
+          rustup target add ${{ env.RUST_TARGET }}
+          rustup default nightly
+
+      - name: Build libmpv DLL
+        id: build
+        run: |
+          chmod +x ./ci/build-libmpv-mingw32.sh
+          ./ci/build-libmpv-mingw32.sh
+
+      - name: Functional test
+        run: |
+          cd artifact && wine ./libmpv-2.dll || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: libmpv-mingw32
+          path: artifact/*
+
+      - name: Save Cache
+        uses: actions/cache/save@v6
+        if: always()
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: mingw32-${{ steps.get_time.outputs.timestamp }}
