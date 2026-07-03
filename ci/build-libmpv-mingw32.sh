@@ -2,7 +2,7 @@
 export TARGET=i686-w64-mingw32
 export RUST_TARGET=i686-pc-windows-gnu
 
-# Build all deps using existing script (no args = deps only)
+# Build all deps using existing script
 ./ci/build-mingw64.sh
 
 # Re-setup env for second meson call
@@ -13,6 +13,8 @@ export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
 export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
+# Wine needs to find MinGW runtime DLLs
+export WINEPATH="$(/usr/bin/$TARGET-gcc-posix -print-file-name=);/usr/$TARGET/lib;$prefix_dir/bin"
 
 build=mingw_build
 rm -rf $build
