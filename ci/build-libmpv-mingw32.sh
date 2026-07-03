@@ -1,6 +1,5 @@
 #!/bin/bash -e
 # Build libmpv DLL using MinGW i686 cross-compilation
-# Simplified: only build core deps, let meson handle the rest via wraps
 
 prefix_dir=$PWD/mingw_prefix
 mkdir -p "$prefix_dir"
@@ -24,6 +23,23 @@ export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
 
 fam=x86
+
+# Create cmake toolchain file for cross-compilation
+cat >"$prefix_dir/mingw-toolchain.cmake" <<CMAKE_EOF
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR ${fam})
+set(CMAKE_C_COMPILER ${CC})
+set(CMAKE_CXX_COMPILER ${CXX})
+set(CMAKE_RC_COMPILER ${TARGET}-windres)
+set(CMAKE_ASM_COMPILER ${AS})
+set(CMAKE_FIND_ROOT_PATH $prefix_dir /usr/${TARGET})
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+set(CMAKE_BUILD_TYPE Release)
+CMAKE_EOF
+
 cat >"$prefix_dir/crossfile" <<EOF
 [built-in options]
 buildtype = 'release'
@@ -41,6 +57,7 @@ pkg-config = 'pkg-config'
 windres = '${TARGET}-windres'
 dlltool = '${TARGET}-dlltool'
 nasm = 'nasm'
+cmake = 'cmake'
 exe_wrapper = 'wine'
 [host_machine]
 system = 'windows'
@@ -51,11 +68,8 @@ EOF
 
 cmake_args=(
     -Wno-dev -GNinja
-    -DCMAKE_SYSTEM_PROCESSOR="${fam}"
-    -DCMAKE_SYSTEM_NAME=Windows
-    -DCMAKE_FIND_ROOT_PATH="$PKG_CONFIG_SYSROOT_DIR"
-    -DCMAKE_RC_COMPILER="${TARGET}-windres"
-    -DCMAKE_ASM_COMPILER="$AS"
+    -DCMAKE_TOOLCHAIN_FILE="$prefix_dir/mingw-toolchain.cmake"
+    -DCMAKE_INSTALL_PREFIX=/usr
     -DCMAKE_BUILD_TYPE=Release
     -DBUILD_SHARED_LIBS=ON
 )
@@ -93,7 +107,7 @@ function build_if_missing {
     echo "::endgroup::"
 }
 
-## Core dependencies only
+## Core dependencies
 
 _iconv () {
     local ver=1.19
@@ -145,6 +159,85 @@ _ffmpeg () {
 }
 _ffmpeg_mark=lib/libavcodec.dll.a
 
+_shaderc () {
+    [ -d shaderc ] || git clone --depth=1 https://github.com/google/shaderc.git
+    [ -d shaderc/third_party ] || (cd shaderc && ./utils/git-sync-deps)
+    builddir shaderc
+    cmake .. "${cmake_args[@]}" \
+        -DBUILD_SHARED_LIBS=OFF -DSHADERC_SKIP_TESTS=ON -DSHADERC_SKIP_EXAMPLES=ON
+    makeplusinstall
+}
+_shaderc_mark=lib/libshaderc_shared.dll.a
+
+_spirv_cross () {
+    [ -d SPIRV-Cross ] || git clone --depth=1 https://github.com/KhronosGroup/SPIRV-Cross
+    builddir SPIRV-Cross
+    cmake .. "${cmake_args[@]}" \
+        -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_{CLI,STATIC}=OFF
+    makeplusinstall
+}
+_spirv_cross_mark=lib/libspirv-cross-c-shared.dll.a
+
+_vulkan_headers () {
+    [ -d Vulkan-Headers ] || git clone --depth=1 https://github.com/KhronosGroup/Vulkan-Headers
+    builddir Vulkan-Headers
+    cmake .. "${cmake_args[@]}"
+    makeplusinstall
+}
+_vulkan_headers_mark=include/vulkan/vulkan.h
+
+_vulkan_loader () {
+    [ -d Vulkan-Loader ] || git clone --depth=1 https://github.com/KhronosGroup/Vulkan-Loader
+    builddir Vulkan-Loader
+    cmake .. "${cmake_args[@]}" -DUSE_GAS=ON
+    makeplusinstall
+}
+_vulkan_loader_mark=lib/libvulkan-1.dll.a
+
+_libplacebo () {
+    [ -d libplacebo ] || git clone --depth=1 https://code.videolan.org/videolan/libplacebo.git
+    builddir libplacebo
+    meson setup .. --cross-file "$prefix_dir/crossfile" \
+        -Ddemos=false -D{opengl,d3d11,lcms}=enabled
+    makeplusinstall
+}
+_libplacebo_mark=lib/libplacebo.dll.a
+
+_freetype () {
+    local ver=2.14.3
+    gettar "https://download.savannah.gnu.org/releases/freetype/freetype-${ver}.tar.xz"
+    builddir freetype-${ver}
+    meson setup .. --cross-file "$prefix_dir/crossfile"
+    makeplusinstall
+}
+_freetype_mark=lib/libfreetype.dll.a
+
+_fribidi () {
+    local ver=1.0.16
+    gettar "https://github.com/fribidi/fribidi/releases/download/v${ver}/fribidi-${ver}.tar.xz"
+    builddir fribidi-${ver}
+    meson setup .. --cross-file "$prefix_dir/crossfile" -D{tests,docs}=false
+    makeplusinstall
+}
+_fribidi_mark=lib/libfribidi.dll.a
+
+_harfbuzz () {
+    local ver=14.2.0
+    gettar "https://github.com/harfbuzz/harfbuzz/releases/download/${ver}/harfbuzz-${ver}.tar.xz"
+    builddir harfbuzz-${ver}
+    meson setup .. --cross-file "$prefix_dir/crossfile" -Dtests=disabled
+    makeplusinstall
+}
+_harfbuzz_mark=lib/libharfbuzz.dll.a
+
+_libass () {
+    [ -d libass ] || git clone --depth=1 https://github.com/libass/libass.git
+    builddir libass
+    meson setup .. --cross-file "$prefix_dir/crossfile"
+    makeplusinstall
+}
+_libass_mark=lib/libass.dll.a
+
 _luajit () {
     [ -d LuaJIT ] || git clone --depth=1 https://github.com/LuaJIT/LuaJIT.git
     pushd LuaJIT
@@ -156,12 +249,27 @@ _luajit () {
 }
 _luajit_mark=lib/libluajit-5.1.a
 
-# Build core deps (libplacebo/shaderc/spirv-cross handled by meson wraps)
-for x in iconv zlib-ng amf-headers dav1d ffmpeg luajit; do
+_curl () {
+    local ver=8.20.0
+    gettar "https://curl.se/download/curl-${ver}.tar.xz"
+    builddir curl-${ver}
+    cmake .. "${cmake_args[@]}" \
+        -DCURL_{USE_SCHANNEL,ZLIB}=ON -DCURL_DISABLE_LDAP=ON -DCURL_USE_LIBPSL=OFF
+    makeplusinstall
+}
+_curl_mark=lib/libcurl.dll.a
+
+# Build all dependencies in order
+for x in iconv zlib-ng amf-headers dav1d; do
+    build_if_missing $x
+done
+build_if_missing vulkan-headers
+build_if_missing vulkan-loader
+for x in ffmpeg shaderc spirv-cross libplacebo freetype fribidi harfbuzz libass luajit curl; do
     build_if_missing $x
 done
 
-## Build libmpv as DLL - let meson handle remaining deps via wraps
+## Build libmpv as DLL
 CFLAGS+=" -I'$prefix_dir/include'"
 LDFLAGS+=" -L'$prefix_dir/lib'"
 export CFLAGS LDFLAGS
@@ -171,11 +279,7 @@ meson setup build \
     -Dlibmpv=true -Dcplayer=false -Dtests=false \
     -Dgpl=true -Dlua=luajit \
     -Ddrm=disabled -Dlibarchive=disabled -Drubberband=disabled \
-    -Dwayland=disabled -Dx11=disabled \
-    -Dlibplacebo=disabled \
-    -Dvulkan=disabled \
-    -Dshaderc=disabled \
-    -Dspirv-cross=disabled
+    -Dwayland=disabled -Dx11=disabled
 
 meson compile -C build
 
