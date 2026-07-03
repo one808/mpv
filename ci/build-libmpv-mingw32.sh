@@ -2,7 +2,7 @@
 export TARGET=i686-w64-mingw32
 export RUST_TARGET=i686-pc-windows-gnu
 
-# Build all deps using existing script
+# Build all deps using existing script (static linking)
 ./ci/build-mingw64.sh
 
 # Re-setup env for second meson call
@@ -40,7 +40,7 @@ meson compile -C $build
 
 # Find and copy artifacts
 mkdir -p artifact
-echo "=== Build directory contents ==="
+echo "=== Build directory ==="
 ls -la $build/*.dll $build/*.a $build/*.lib 2>/dev/null || true
 
 # Copy DLL and import library
@@ -48,12 +48,9 @@ find $build -maxdepth 1 -name "*.dll" -exec cp -v {} artifact/ \;
 find $build -maxdepth 1 -name "*.a" -exec cp -v {} artifact/ \;
 find $build -maxdepth 1 -name "*.lib" -exec cp -v {} artifact/ \;
 
-# Also copy version header for development
-cp -v $build/mpv_version.h artifact/ 2>/dev/null || true
-cp -v include/mpv/client.h artifact/ 2>/dev/null || true
-cp -v include/mpv/render.h artifact/ 2>/dev/null || true
-cp -v include/mpv/render_gl.h artifact/ 2>/dev/null || true
-cp -v include/mpv/stream_cb.h artifact/ 2>/dev/null || true
+# Copy headers for development
+mkdir -p artifact/include/mpv
+cp -v include/mpv/*.h artifact/include/mpv/ 2>/dev/null || true
 
 echo "=== Artifact directory ==="
 ls -la artifact/
