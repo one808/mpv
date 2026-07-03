@@ -260,6 +260,16 @@ $projects = @(
         Path = "$subprojects/aom-cmake.wrap"
         URL = "https://aomedia.googlesource.com/aom"
         Revision = "main"
+    },
+    @{
+        Path = "$subprojects/zstd.wrap"
+        URL = "https://github.com/facebook/zstd"
+        Revision = "dev"
+    },
+    @{
+        Path = "$subprojects/brotli.wrap"
+        URL = "https://github.com/google/brotli"
+        Revision = "main"
     }
 )
 
