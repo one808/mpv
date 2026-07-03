@@ -6,7 +6,7 @@ mkdir -p "$prefix_dir"
 ln -snf . "$prefix_dir/usr"
 ln -snf . "$prefix_dir/local"
 
-wget="wget -nc --progress=bar=force"
+wget="wget -nc -q"
 gitclone="git clone --depth=1 --recursive --shallow-submodules"
 
 TARGET=i686-w64-mingw32
