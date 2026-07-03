@@ -311,9 +311,9 @@ meson setup build `
     -Dffmpeg:gpl=enabled `
     -Dffmpeg:sdl2=disabled `
     -Dffmpeg:vulkan=auto `
-    -Dffmpeg:libdav1d=enabled `
-    -Dffmpeg:libjxl=enabled `
-    -Dffmpeg:libaom=enabled `
+            -Dffmpeg:libdav1d=enabled `
+            -Dffmpeg:libjxl=enabled `
+            -Dffmpeg:libaom=disabled `
     -Dharfbuzz:freetype=enabled `
     -Dlcms2:fastfloat=true `
     -Dlcms2:jpeg=disabled `
