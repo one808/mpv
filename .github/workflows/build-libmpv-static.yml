@@ -85,9 +85,9 @@ jobs:
         with:
           name: libmpv-static-${{ matrix.arch }}
           path: |
-            build/libmpv-2.dll
-            build/libmpv*.lib
-            build/libmpv*.a
+            build/mpv-2.dll
+            build/mpv*.lib
+            build/mpv*.a
 
       - name: Save Cache
         uses: actions/cache/save@v6
