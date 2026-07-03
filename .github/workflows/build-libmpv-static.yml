@@ -91,49 +91,12 @@ jobs:
           Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
           Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=${{ matrix.arch }} -host_arch=${{ matrix.arch }}"
 
-          # Reconfigure with libmpv=true, cplayer=false
           $amfExtractPath = (Resolve-Path "subprojects/amf-headers").Path
-          meson setup build --reconfigure --wipe `
-            --wrap-mode=forcefallback `
-            -Ddefault_library=static `
-            -Dc_args="-I$amfExtractPath" `
+          meson setup build --reconfigure `
             -Dlibmpv=true `
             -Dcplayer=false `
             -Dtests=false `
-            -Dgpl=true `
-            -Dffmpeg:gpl=enabled `
-            -Dffmpeg:sdl2=disabled `
-            -Dffmpeg:vulkan=auto `
-            -Dffmpeg:libdav1d=enabled `
-            -Dffmpeg:libjxl=enabled `
-            -Dffmpeg:libaom=enabled `
-            -Dharfbuzz:freetype=enabled `
-            -Dlcms2:fastfloat=true `
-            -Dlcms2:jpeg=disabled `
-            -Dlcms2:tiff=disabled `
-            -Dlibass:test=enabled `
-            -Dlibjpeg-turbo:tests=disabled `
-            -Dlibusb:tests=false `
-            -Dlibusb:examples=false `
-            -Dlibplacebo:demos=false `
-            -Dlibplacebo:lcms=enabled `
-            -Dlibplacebo:shaderc=enabled `
-            -Dlibplacebo:tests=false `
-            -Dlibplacebo:vulkan=enabled `
-            -Dlibplacebo:d3d11=enabled `
-            -Dlibpsl:tests=false `
-            -Dxxhash:inline-all=true `
-            -Dxxhash:cli=false `
-            -Dluajit:amalgam=true `
-            -Damf=enabled `
-            -Dd3d11=enabled `
-            -Djavascript=enabled `
-            -Dlua=luajit `
-            -Ddrm=disabled `
-            -Dlibarchive=disabled `
-            -Drubberband=disabled `
-            -Dwayland=disabled `
-            -Dx11=disabled
+            -Dc_args="-I$amfExtractPath"
           ninja -C build libmpv-2.dll
 
       - uses: actions/upload-artifact@v7
