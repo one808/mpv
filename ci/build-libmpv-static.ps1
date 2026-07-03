@@ -270,6 +270,11 @@ $projects = @(
         Path = "$subprojects/brotli.wrap"
         URL = "https://github.com/google/brotli"
         Revision = "main"
+    },
+    @{
+        Path = "$subprojects/libpsl.wrap"
+        URL = "https://github.com/rockdaboot/libpsl"
+        Revision = "master"
     }
 )
 
