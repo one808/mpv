@@ -13,12 +13,6 @@ jobs:
           - arch: x86
 
     env:
-      CC: "ccache clang"
-      CXX: "ccache clang++"
-      CC_LD: "lld-link"
-      CXX_LD: "lld-link"
-      RUST_LD: "lld-link"
-      WINDRES: "llvm-rc"
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_DIR: "${{ github.workspace }}\\.ccache"
       CCACHE_MAXSIZE: 500M
@@ -69,12 +63,24 @@ jobs:
       - name: Build libmpv
         id: build
         run: |
-          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
-                                                             $_ -ne 'C:\Program Files\CMake\bin' -and `
-                                                             $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
+          # Remove system LLVM and Strawberry from PATH, use VS x86 tools
+          $llvmX64 = "$env:VS\VC\Tools\Llvm\x64\bin"
+          $llvmX86 = "$env:VS\VC\Tools\Llvm\x86\bin"
+          $env:PATH = ($env:PATH -split ';' | Where-Object { 
+              $_ -ne 'C:\Program Files\LLVM\bin' -and `
+              $_ -ne 'C:\Program Files\CMake\bin' -and `
+              $_ -ne 'C:\Strawberry\c\bin' -and `
+              $_ -ne $llvmX64
+          }) -join ';'
           $env:PATH += ';C:\Program Files\NASM'
           Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
           Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=${{ matrix.arch }} -host_arch=${{ matrix.arch }}"
+          # Use MSVC compiler for 32-bit builds (clang x86 may not be available)
+          $env:CC = "cl.exe"
+          $env:CXX = "cl.exe"
+          $env:CC_LD = "link.exe"
+          $env:CXX_LD = "link.exe"
+          $env:WINDRES = "rc.exe"
           ./ci/build-libmpv-static-win32.ps1
 
       - name: Print build log
