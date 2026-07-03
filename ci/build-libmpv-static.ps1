@@ -324,4 +324,4 @@ meson setup build `
     -Drubberband=disabled `
     -Dwayland=disabled `
     -Dx11=disabled
-ninja -C build mpv-2.dll
+ninja -C build libmpv-2.dll
