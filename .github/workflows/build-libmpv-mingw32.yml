@@ -38,6 +38,12 @@ jobs:
           rustup target add ${{ env.RUST_TARGET }}
           rustup default nightly
 
+      - name: Install Meson Wraps
+        run: |
+          mkdir -p subprojects
+          meson wrap install mujs
+          meson subprojects download
+
       - name: Build libmpv DLL
         id: build
         run: |
