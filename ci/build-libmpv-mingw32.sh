@@ -13,7 +13,6 @@ export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
 export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
-# Wine needs to find MinGW runtime DLLs
 export WINEPATH="$(/usr/bin/$TARGET-gcc-posix -print-file-name=);/usr/$TARGET/lib;$prefix_dir/bin"
 
 build=mingw_build
@@ -39,8 +38,22 @@ meson setup $build \
 
 meson compile -C $build
 
+# Find and copy artifacts
 mkdir -p artifact
-cp -v $build/mpv-2.dll artifact/libmpv-2.dll 2>/dev/null || true
-cp -v $build/mpv.dll.a artifact/libmpv.dll.a 2>/dev/null || true
-cp -v $build/mpv.dll artifact/libmpv.dll 2>/dev/null || true
+echo "=== Build directory contents ==="
+ls -la $build/*.dll $build/*.a $build/*.lib 2>/dev/null || true
+
+# Copy DLL and import library
+find $build -maxdepth 1 -name "*.dll" -exec cp -v {} artifact/ \;
+find $build -maxdepth 1 -name "*.a" -exec cp -v {} artifact/ \;
+find $build -maxdepth 1 -name "*.lib" -exec cp -v {} artifact/ \;
+
+# Also copy version header for development
+cp -v $build/mpv_version.h artifact/ 2>/dev/null || true
+cp -v include/mpv/client.h artifact/ 2>/dev/null || true
+cp -v include/mpv/render.h artifact/ 2>/dev/null || true
+cp -v include/mpv/render_gl.h artifact/ 2>/dev/null || true
+cp -v include/mpv/stream_cb.h artifact/ 2>/dev/null || true
+
+echo "=== Artifact directory ==="
 ls -la artifact/
