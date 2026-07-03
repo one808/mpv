@@ -1,23 +1,21 @@
 #!/bin/bash -e
-# Build libmpv DLL for i686 using existing MinGW infrastructure
-# Step 1: Build all dependencies using the existing script
-# Step 2: Build libmpv with -Dlibmpv=true
-
-# Set target for the existing build script
 export TARGET=i686-w64-mingw32
 export RUST_TARGET=i686-pc-windows-gnu
 
-# Call existing script with NO args -> builds deps only, skips mpv.exe
+# Build all deps using existing script (no args = deps only)
 ./ci/build-mingw64.sh
 
-# Now build libmpv as DLL using the deps we just built
+# Re-setup env for second meson call
 prefix_dir=$PWD/mingw_prefix
+export CC="ccache $TARGET-gcc-posix"
+export CXX="ccache $TARGET-g++-posix"
+export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
+export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
+export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
+export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
+
 build=mingw_build
 rm -rf $build
-
-CFLAGS+=" -I'$prefix_dir/include'"
-LDFLAGS+=" -L'$prefix_dir/lib'"
-export CFLAGS LDFLAGS
 
 meson setup $build \
     --cross-file "$prefix_dir/crossfile" \
