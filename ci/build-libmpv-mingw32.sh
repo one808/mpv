@@ -2,11 +2,51 @@
 export TARGET=i686-w64-mingw32
 export RUST_TARGET=i686-pc-windows-gnu
 
-# Build all deps using existing script (static linking)
+# Build deps using existing script (creates prefix_dir with shared libs)
 ./ci/build-mingw64.sh
 
-# Re-setup env for second meson call
+# Now rebuild ffmpeg as static library
 prefix_dir=$PWD/mingw_prefix
+export CC="ccache $TARGET-gcc-posix"
+export CXX="ccache $TARGET-g++-posix"
+export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
+export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
+
+# Change crossfile to static
+sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile"
+
+# Rebuild ffmpeg as static
+if [ -d ffmpeg ]; then
+    rm -rf ffmpeg/builddir
+    mkdir -p ffmpeg/builddir
+    pushd ffmpeg/builddir
+    ../configure \
+        --pkg-config=pkg-config --target-os=mingw32 --enable-gpl \
+        --enable-cross-compile --cross-prefix=$TARGET- --arch=i686 \
+        --cc="$CC" --cxx="$CXX" --enable-static --disable-shared \
+        --disable-{doc,programs} \
+        --enable-muxer=spdif --enable-encoder=mjpeg,png --enable-libdav1d \
+        --prefix=/usr
+    make -j$(nproc)
+    make DESTDIR="$prefix_dir" install
+    popd
+fi
+
+# Rebuild other deps as static where needed
+for dep in dav1d lcms2 libplacebo; do
+    if [ -d "$dep" ]; then
+        rm -rf "$dep/builddir"
+        mkdir -p "$dep/builddir"
+        pushd "$dep/builddir"
+        meson setup .. --cross-file "$prefix_dir/crossfile" \
+            -Ddefault_library=static -Dtests=disabled
+        ninja
+        DESTDIR="$prefix_dir" ninja install
+        popd
+    fi
+done
+
+# Now build libmpv as DLL with static deps
 export CC="ccache $TARGET-gcc-posix"
 export CXX="ccache $TARGET-g++-posix"
 export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
@@ -43,12 +83,10 @@ mkdir -p artifact
 echo "=== Build directory ==="
 ls -la $build/*.dll $build/*.a $build/*.lib 2>/dev/null || true
 
-# Copy DLL and import library
 find $build -maxdepth 1 -name "*.dll" -exec cp -v {} artifact/ \;
 find $build -maxdepth 1 -name "*.a" -exec cp -v {} artifact/ \;
 find $build -maxdepth 1 -name "*.lib" -exec cp -v {} artifact/ \;
 
-# Copy headers for development
 mkdir -p artifact/include/mpv
 cp -v include/mpv/*.h artifact/include/mpv/ 2>/dev/null || true
 
