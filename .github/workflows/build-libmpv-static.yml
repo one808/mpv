@@ -11,6 +11,10 @@ jobs:
       matrix:
         include:
           - arch: x64
+          - arch: Win32
+            target: i686-pc-windows-msvc
+            rust_target: i686-pc-windows-gnu
+            wine: wine32
 
     env:
       CC: "ccache clang"
@@ -44,6 +48,15 @@ jobs:
           restore-keys: ${{ matrix.arch }}-
 
       - name: Install dependencies
+        if: matrix.arch == 'x64'
+        run: |
+          python -m pip install meson glad2
+          winget install --accept-source-agreements --accept-package-agreements Ccache.Ccache NASM.NASM
+          echo "$env:LOCALAPPDATA\Microsoft\WinGet\Links" >> $env:GITHUB_PATH
+          rustup default nightly
+
+      - name: Install dependencies (i686)
+        if: matrix.arch == 'Win32'
         run: |
           python -m pip install meson glad2
           winget install --accept-source-agreements --accept-package-agreements Ccache.Ccache NASM.NASM
@@ -59,6 +72,15 @@ jobs:
           meson wrap install zlib
 
       - name: Find Visual Studio
+        if: matrix.arch == 'x64'
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsPath) { throw "Could not find a Visual Studio installation" }
+          "VS=$vsPath" >> $env:GITHUB_ENV
+
+      - name: Find Visual Studio (i686)
+        if: matrix.arch == 'Win32'
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -66,6 +88,19 @@ jobs:
           "VS=$vsPath" >> $env:GITHUB_ENV
 
       - name: Build libmpv
+        if: matrix.arch == 'x64'
+        id: build
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
+                                                             $_ -ne 'C:\Program Files\CMake\bin' -and `
+                                                             $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
+          $env:PATH += ';C:\Program Files\NASM'
+          Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=${{ matrix.arch }} -host_arch=${{ matrix.arch }}"
+          ./ci/build-libmpv-static.ps1
+
+      - name: Build libmpv (i686)
+        if: matrix.arch == 'Win32'
         id: build
         run: |
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
@@ -81,7 +116,13 @@ jobs:
         run: |
           cat ./build/meson-logs/meson-log.txt
 
+      - name: Print build log (i686)
+        if: ${{ failure() && steps.build.outcome == 'failure' }}
+        run: |
+          cat ./build/meson-logs/meson-log.txt
+
       - uses: actions/upload-artifact@v7
+        if: matrix.arch == 'x64'
         with:
           name: libmpv-static-${{ matrix.arch }}
           path: |
@@ -89,9 +130,25 @@ jobs:
             build/mpv*.lib
             build/mpv*.a
 
+      - uses: actions/upload-artifact@v7
+        if: matrix.arch == 'Win32'
+        with:
+          name: libmpv-static-i686
+          path: |
+            build/mpv-2.dll
+            build/mpv*.lib
+            build/mpv*.a
+
       - name: Save Cache
+        if: matrix.arch == 'x64'
         uses: actions/cache/save@v6
-        if: always()
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ matrix.arch }}-${{ steps.get_time.outputs.timestamp }}
+
+      - name: Save Cache (i686)
+        if: matrix.arch == 'Win32'
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ matrix.arch }}-${{ steps.get_time.outputs.timestamp }}
