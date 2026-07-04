@@ -109,7 +109,20 @@ done
 echo "::endgroup::"
 
 ## Build libmpv as DLL with all deps statically linked
-sed -i "s/default_library = 'static'/default_library = 'shared'/" "$prefix_dir/crossfile"
+# Keep crossfile as static — use default_library=both for mpv to produce both .a and .dll
+# Remove .dll.a import libs for deps that were rebuilt as static (not shaderc/spirv-cross)
+# This forces the linker to use the .a static libs
+for name in libass libavcodec libavdevice libavfilter libavformat libavutil \
+            libswresample libswscale libdav1d libplacebo liblcms2 \
+            libfreetype libfribidi libharfbuzz libcurl libiconv \
+            libzlib1 libz; do
+    find "$prefix_dir" -name "${name}*.dll.a" -delete 2>/dev/null || true
+done
+# Also remove any shared .dll files in lib dirs (not bin)
+find "$prefix_dir/lib" -name "*.dll" -delete 2>/dev/null || true
+find "$prefix_dir/usr/lib" -name "*.dll" -delete 2>/dev/null || true
+find "$prefix_dir/usr/local/lib" -name "*.dll" -delete 2>/dev/null || true
+find "$prefix_dir" -name "*.la" -delete 2>/dev/null || true
 export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
 export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
 
@@ -119,6 +132,7 @@ rm -rf $build
 meson setup $build \
     --cross-file "$prefix_dir/crossfile" \
     --buildtype release \
+    --default-library=both \
     --force-fallback-for=mujs \
     -Dmujs:werror=false \
     -Dmujs:default_library=static \
