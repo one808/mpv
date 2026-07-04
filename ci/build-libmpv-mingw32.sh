@@ -63,6 +63,21 @@ EOF
 export CC="ccache $CC"
 export CXX="ccache $CXX"
 
+# cmake flags matching build-mingw64.sh
+fam=x86_64
+[[ "$TARGET" == "i686-"* ]] && fam=x86
+cmake_args=(
+    -Wno-dev
+    -GNinja
+    -DCMAKE_SYSTEM_PROCESSOR="${fam}"
+    -DCMAKE_SYSTEM_NAME=Windows
+    -DCMAKE_FIND_ROOT_PATH="$PKG_CONFIG_SYSROOT_DIR"
+    -DCMAKE_RC_COMPILER="${TARGET}-windres"
+    -DCMAKE_ASM_COMPILER="$AS"
+    -DCMAKE_BUILD_TYPE=Release
+    -DBUILD_SHARED_LIBS=ON
+)
+
 export WINEPATH="$(/usr/bin/$TARGET-gcc-posix -print-file-name=);/usr/$TARGET/lib;$prefix_dir/bin"
 
 function builddir {
