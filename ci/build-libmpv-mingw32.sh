@@ -188,37 +188,18 @@ _shaderc () {
         (cd shaderc && ./utils/git-sync-deps)
     fi
     builddir shaderc
-    cmake .. -GNinja \
-        -DCMAKE_SYSTEM_NAME=Windows \
-        -DCMAKE_SYSTEM_PROCESSOR=x86 \
-        -DCMAKE_C_COMPILER="${TARGET}-gcc-posix" \
-        -DCMAKE_CXX_COMPILER="${TARGET}-g++-posix" \
-        -DCMAKE_RC_COMPILER="${TARGET}-windres" \
-        -DCMAKE_FIND_ROOT_PATH="$prefix_dir" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_SHARED_LIBS=ON \
-        -DSHADERC_SKIP_TESTS=ON
+    cmake .. "${cmake_args[@]}" \
+        -DBUILD_SHARED_LIBS=OFF -DSHADERC_SKIP_TESTS=ON
     makeplusinstall
     popd
 }
-_shaderc_mark=lib/libshaderc_shared.dll.a
+_shaderc_mark=lib/libshaderc.a
 
 _spirv_cross () {
     [ -d SPIRV-Cross ] || $gitclone https://github.com/KhronosGroup/SPIRV-Cross
     builddir SPIRV-Cross
-    cmake .. -GNinja \
-        -DCMAKE_SYSTEM_NAME=Windows \
-        -DCMAKE_SYSTEM_PROCESSOR=x86 \
-        -DCMAKE_C_COMPILER="${TARGET}-gcc-posix" \
-        -DCMAKE_CXX_COMPILER="${TARGET}-g++-posix" \
-        -DCMAKE_RC_COMPILER="${TARGET}-windres" \
-        -DCMAKE_FIND_ROOT_PATH="$prefix_dir" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_SHARED_LIBS=ON \
-        -DSPIRV_CROSS_SHARED=ON \
-        -DSPIRV_CROSS_STATIC=OFF \
-        -DSPIRV_CROSS_CLI=OFF \
-        -DSPIRV_CROSS_ENABLE_TESTS=OFF
+    cmake .. "${cmake_args[@]}" \
+        -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_{CLI,STATIC}=OFF
     makeplusinstall
     popd
 }
