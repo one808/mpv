@@ -32,31 +32,21 @@ if [ -d ffmpeg ]; then
     popd
 fi
 
-# Rebuild other deps as static where needed
-for dep in lcms2 libplacebo; do
-    if [ -d "$dep" ]; then
-        rm -rf "$dep/builddir"
-        mkdir -p "$dep/builddir"
-        pushd "$dep/builddir"
-        meson setup .. --cross-file "$prefix_dir/crossfile" \
-            -Ddefault_library=static -Dtests=disabled
-        ninja
-        DESTDIR="$prefix_dir" ninja install
-        popd
-    fi
-done
-
-# dav1d uses different option names
-if [ -d dav1d ]; then
-    rm -rf dav1d/builddir
-    mkdir -p dav1d/builddir
-    pushd dav1d/builddir
-    meson setup .. --cross-file "$prefix_dir/crossfile" \
-        -Ddefault_library=static -Denable_{tools,tests}=false
+# Rebuild each dep as static — each has different meson option names
+static_meson() {
+    local dir=$1; shift
+    rm -rf "$dir/builddir"
+    mkdir -p "$dir/builddir"
+    pushd "$dir/builddir"
+    meson setup .. --cross-file "$prefix_dir/crossfile" "$@"
     ninja
     DESTDIR="$prefix_dir" ninja install
     popd
-fi
+}
+
+[ -d dav1d ]      && static_meson dav1d -Ddefault_library=static -Denable_{tools,tests}=false
+[ -d lcms2 ]      && static_meson lcms2 -Ddefault_library=static -Dtests=disabled
+[ -d libplacebo ] && static_meson libplacebo -Ddefault_library=static -Ddemos=false
 
 # Now build libmpv as DLL with static deps
 export CC="ccache $TARGET-gcc-posix"
