@@ -104,17 +104,7 @@ for libdir in "$prefix_dir/usr/local/lib" "$prefix_dir/usr/lib" "$prefix_dir/lib
     fi
 done
 
-# Fix spirv-cross: rename shared pkg-config to static
-for libdir in "$prefix_dir/usr/local/lib" "$prefix_dir/usr/lib"; do
-    [ -d "$libdir/pkgconfig" ] || continue
-    for f in "$libdir/pkgconfig"/*.pc; do
-        [ -f "$f" ] || continue
-        sed -i 's/-lspirv-cross-c-shared/-lspirv-cross-c/g' "$f"
-        sed -i 's/-lshaderc_shared/-lshaderc/g' "$f"
-    done
-    # spirv-cross: cmake installs as libspirv-cross-c.a, pkg-config references -lspirv-cross-c
-    # No symlink needed if static rebuild worked correctly
-done
+# spirv-cross and shaderc: kept as shared, no pkg-config fix needed
 
 echo "::endgroup::"
 
