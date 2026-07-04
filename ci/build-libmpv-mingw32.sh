@@ -346,7 +346,7 @@ ${TARGET}-g++-posix -c -O2 -std=c++17 ci/charconv_compat.cpp \
     -o "$prefix_dir/charconv_compat.o"
 
 export CFLAGS+=" -I'$prefix_dir/include'"
-export LDFLAGS+=" -L'$prefix_dir/lib' $prefix_dir/charconv_compat.o"
+export LDFLAGS+=" -L'$prefix_dir/lib' $prefix_dir/charconv_compat.o -static-libgcc -static-libstdc++ -Wl,-Bstatic -lpthread -Wl,-Bdynamic"
 build=mingw_build
 rm -rf $build
 
