@@ -52,6 +52,8 @@ static_meson() {
 [ -d libplacebo ] && static_meson libplacebo -Ddefault_library=static -Ddemos=false
 
 # Now build libmpv as DLL with static deps
+# Restore crossfile to shared for libmpv itself (deps are already static)
+sed -i "s/default_library = 'static'/default_library = 'shared'/" "$prefix_dir/crossfile"
 export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
 export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
 
