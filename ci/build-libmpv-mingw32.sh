@@ -124,7 +124,7 @@ find "$prefix_dir/usr/lib" -name "*.dll" -delete 2>/dev/null || true
 find "$prefix_dir/usr/local/lib" -name "*.dll" -delete 2>/dev/null || true
 find "$prefix_dir" -name "*.la" -delete 2>/dev/null || true
 export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
-export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
+export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib' -L'$prefix_dir/usr/lib'"
 
 build=mingw_build
 rm -rf $build
