@@ -5,18 +5,55 @@ export RUST_TARGET=i686-pc-windows-gnu
 # Build deps using existing script (creates prefix_dir with shared libs)
 ./ci/build-mingw64.sh
 
-# Now rebuild ffmpeg as static library
 prefix_dir=$PWD/mingw_prefix
 export CC="ccache $TARGET-gcc-posix"
 export CXX="ccache $TARGET-g++-posix"
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
 
-# Change crossfile to static
+# Change crossfile to static — all deps will be rebuilt as static
 sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile"
 
-# Set WINEPATH early — needed for meson sanity checks in cross builds
+# Set WINEPATH for meson sanity checks in cross builds
 export WINEPATH="$(/usr/bin/$TARGET-gcc-posix -print-file-name=);/usr/$TARGET/lib;$prefix_dir/bin"
+
+## Helper: rebuild a meson project as static
+static_meson() {
+    local dir=$1; shift
+    [ -d "$dir" ] || return 0
+    rm -rf "$dir/builddir"
+    mkdir -p "$dir/builddir"
+    pushd "$dir/builddir"
+    meson setup .. --cross-file "$prefix_dir/crossfile" "$@"
+    ninja
+    DESTDIR="$prefix_dir" ninja install
+    popd
+}
+
+## Helper: rebuild a cmake project as static
+static_cmake() {
+    local dir=$1; shift
+    [ -d "$dir" ] || return 0
+    rm -rf "$dir/builddir"
+    mkdir -p "$dir/builddir"
+    pushd "$dir/builddir"
+    cmake .. \
+        -GNinja \
+        -DCMAKE_SYSTEM_NAME=Windows \
+        -DCMAKE_SYSTEM_PROCESSOR=x86 \
+        -DCMAKE_C_COMPILER="$CC" \
+        -DCMAKE_CXX_COMPILER="$CXX" \
+        -DCMAKE_RC_COMPILER="${TARGET}-windres" \
+        -DCMAKE_FIND_ROOT_PATH="$prefix_dir" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        "$@"
+    ninja
+    DESTDIR="$prefix_dir" ninja install
+    popd
+}
+
+echo "::group::Rebuilding deps as static libraries"
 
 # Rebuild ffmpeg as static
 if [ -d ffmpeg ]; then
@@ -35,24 +72,38 @@ if [ -d ffmpeg ]; then
     popd
 fi
 
-# Rebuild each dep as static — each has different meson option names
-static_meson() {
-    local dir=$1; shift
-    rm -rf "$dir/builddir"
-    mkdir -p "$dir/builddir"
-    pushd "$dir/builddir"
-    meson setup .. --cross-file "$prefix_dir/crossfile" "$@"
-    ninja
-    DESTDIR="$prefix_dir" ninja install
+# Meson deps — each has different option names for disabling tests
+static_meson dav1d      -Denable_{tools,tests}=false
+static_meson lcms2      -Dtests=disabled
+static_meson libplacebo -Ddemos=false
+static_meson freetype
+static_meson fribidi    -Dtests=false -Ddocs=false
+static_meson harfbuzz   -Dtests=disabled
+static_meson libass
+
+# CMake deps
+static_cmake shaderc     -DSHADERC_SKIP_TESTS=ON
+static_cmake spirv-cross -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_{CLI,STATIC}=OFF
+static_cmake curl        -DCURL_{USE_SCHANNEL,ZLIB}=ON -DCURL_DISABLE_LDAP=ON -DCURL_USE_LIBPSL=OFF
+
+# zlib-ng (cmake)
+static_cmake zlib-ng -DZLIB_COMPAT=ON -DBUILD_TESTING=OFF
+
+# libiconv (autotools) — rebuild as static
+if [ -d libiconv-1.19 ]; then
+    rm -rf libiconv-1.19/builddir
+    mkdir -p libiconv-1.19/builddir
+    pushd libiconv-1.19/builddir
+    ../configure --host=$TARGET --enable-static --disable-shared
+    make -j$(nproc)
+    make DESTDIR="$prefix_dir" install
     popd
-}
+fi
 
-[ -d dav1d ]      && static_meson dav1d -Ddefault_library=static -Denable_{tools,tests}=false
-[ -d lcms2 ]      && static_meson lcms2 -Ddefault_library=static -Dtests=disabled
-[ -d libplacebo ] && static_meson libplacebo -Ddefault_library=static -Ddemos=false
+echo "::endgroup::"
 
-# Now build libmpv as DLL with static deps
-# Restore crossfile to shared for libmpv itself (deps are already static)
+## Build libmpv as DLL with all deps statically linked
+# Restore crossfile to shared — only libmpv itself should be a DLL
 sed -i "s/default_library = 'static'/default_library = 'shared'/" "$prefix_dir/crossfile"
 export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
 export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
@@ -80,7 +131,7 @@ meson setup $build \
 
 meson compile -C $build
 
-# Find and copy artifacts
+# Collect artifacts
 mkdir -p artifact
 echo "=== Build directory ==="
 ls -la $build/*.dll $build/*.a $build/*.lib 2>/dev/null || true
