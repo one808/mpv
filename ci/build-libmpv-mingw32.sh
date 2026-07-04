@@ -41,8 +41,8 @@ static_cmake() {
         -GNinja \
         -DCMAKE_SYSTEM_NAME=Windows \
         -DCMAKE_SYSTEM_PROCESSOR=x86 \
-        -DCMAKE_C_COMPILER="$CC" \
-        -DCMAKE_CXX_COMPILER="$CXX" \
+        -DCMAKE_C_COMPILER="${TARGET}-gcc-posix" \
+        -DCMAKE_CXX_COMPILER="${TARGET}-g++-posix" \
         -DCMAKE_RC_COMPILER="${TARGET}-windres" \
         -DCMAKE_FIND_ROOT_PATH="$prefix_dir" \
         -DCMAKE_BUILD_TYPE=Release \
