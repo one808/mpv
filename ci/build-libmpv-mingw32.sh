@@ -68,11 +68,8 @@ static_meson libplacebo -Ddemos=false
 static_meson libass
 
 static_cmake shaderc     -DSHADERC_SKIP_TESTS=ON
-static_cmake spirv-cross -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_SHARED=OFF -DSPIRV_CROSS_CLI=OFF \
-    -DCMAKE_INSTALL_PREFIX=/usr/local
-# spirv-cross cmake may install static lib with different name — find and symlink
-echo "spirv-cross static lib search:"
-find "$prefix_dir" -name "*spirv*cross*c*" -type f 2>/dev/null || true
+static_cmake SPIRV-Cross -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_SHARED=OFF -DSPIRV_CROSS_CLI=OFF \
+    -DSPIRV_CROSS_ENABLE_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
 
 # --- Versioned deps (dir name includes version) ---
 static_meson freetype-2.14.3
@@ -114,21 +111,11 @@ for libdir in "$prefix_dir/usr/local/lib" "$prefix_dir/usr/lib"; do
     [ -d "$libdir/pkgconfig" ] || continue
     for f in "$libdir/pkgconfig"/*.pc; do
         [ -f "$f" ] || continue
-        sed -i 's/-lspirv-cross-c-shared/-lspirv-cross-c-static/g' "$f"
+        sed -i 's/-lspirv-cross-c-shared/-lspirv-cross-c/g' "$f"
         sed -i 's/-lshaderc_shared/-lshaderc/g' "$f"
     done
-    # Create static lib symlinks if only shared names exist
-    if [ -f "$libdir/libspirv-cross-c-static.a" ] && [ ! -f "$libdir/libspirv-cross-c-shared.a" ]; then
-        ln -sf libspirv-cross-c-static.a "$libdir/libspirv-cross-c-shared.a"
-    fi
-    # spirv-cross cmake may install to a different name — find any static lib and symlink
-    for f in "$libdir"/libspirv-cross-c*.a; do
-        [ -f "$f" ] || continue
-        basename_lib=$(basename "$f")
-        if [ ! -f "$libdir/libspirv-cross-c-static.a" ]; then
-            ln -sf "$basename_lib" "$libdir/libspirv-cross-c-static.a"
-        fi
-    done
+    # spirv-cross: cmake installs as libspirv-cross-c.a, pkg-config references -lspirv-cross-c
+    # No symlink needed if static rebuild worked correctly
 done
 
 echo "::endgroup::"
