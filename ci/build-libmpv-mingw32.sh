@@ -110,6 +110,12 @@ echo "::endgroup::"
 
 ## Build libmpv as DLL with all deps statically linked
 # Keep crossfile as static — use default_library=both for mpv to produce both .a and .dll
+# Debug: show what .a and .dll.a files exist for FFmpeg
+echo "=== FFmpeg .a files ==="
+find "$prefix_dir" -name "libav*.a" -o -name "libsw*.a" 2>/dev/null || true
+echo "=== FFmpeg .dll.a files ==="
+find "$prefix_dir" -name "libav*.dll.a" -o -name "libsw*.dll.a" 2>/dev/null || true
+
 # Remove .dll.a import libs for deps that were rebuilt as static (not shaderc/spirv-cross)
 # This forces the linker to use the .a static libs
 for name in libass libavcodec libavdevice libavfilter libavformat libavutil \
