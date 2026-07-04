@@ -72,7 +72,7 @@ echo "::group::Rebuilding deps as static libraries"
 # Autotools deps
 static_at libiconv-1.19
 
-# FFmpeg (special handling — autotools with extra options)
+# FFmpeg (special handling)
 if [ -d ffmpeg ]; then
     rm -rf ffmpeg/builddir
     mkdir -p ffmpeg/builddir
@@ -89,7 +89,7 @@ if [ -d ffmpeg ]; then
     popd
 fi
 
-# Meson deps — explicit -Ddefault_library=static for each
+# Meson deps
 static_meson dav1d      -Denable_{tools,tests}=false
 static_meson lcms2      -Dtests=disabled
 static_meson libplacebo -Ddemos=false
@@ -106,12 +106,35 @@ static_cmake zlib-ng     -DZLIB_COMPAT=ON -DBUILD_TESTING=OFF
 
 echo "::endgroup::"
 
-# Remove shared libs from prefix — only keep static .a files
-# This forces meson/mpv to link against the static versions
+## Fix pkg-config files to reference static libraries
+# After rebuilding as static, pkg-config files may still reference shared lib names.
+# We need to fix them so meson finds the .a files.
+
+# Fix shaderc: change -lshaderc_shared to -lshaderc
+for f in "$prefix_dir"/usr/local/lib/pkgconfig/shaderc*.pc; do
+    [ -f "$f" ] || continue
+    sed -i 's/-lshaderc_shared/-lshaderc/g' "$f"
+    sed -i 's/-lspirv-cross-c-shared/-lspirv-cross-c-static/g' "$f"
+done
+
+# Fix spirv-cross: change -lspirv-cross-c-shared to -lspirv-cross-c-static
+for f in "$prefix_dir"/usr/local/lib/pkgconfig/SPIRV*.pc "$prefix_dir"/usr/lib/pkgconfig/SPIRV*.pc; do
+    [ -f "$f" ] || continue
+    sed -i 's/-lspirv-cross-c-shared/-lspirv-cross-c-static/g' "$f"
+done
+
+# Fix curl: remove -lssl -lcrypto -lnghttp2 if not available
+for f in "$prefix_dir"/usr/local/lib/pkgconfig/libcurl*.pc "$prefix_dir"/usr/lib/pkgconfig/libcurl*.pc; do
+    [ -f "$f" ] || continue
+    sed -i 's/-lssl//g; s/-lcrypto//g; s/-lnghttp2//g' "$f"
+done
+
+# Remove shared library files (.dll and .dll.a) so linker picks up static .a
 find "$prefix_dir/lib" -name "*.dll.a" -delete 2>/dev/null || true
-find "$prefix_dir/lib" -name "*.dll" -delete 2>/dev/null || true
+find "$prefix_dir/usr/lib" -name "*.dll.a" -delete 2>/dev/null || true
+find "$prefix_dir/usr/local/lib" -name "*.dll.a" -delete 2>/dev/null || true
 find "$prefix_dir/bin" -name "*.dll" -delete 2>/dev/null || true
-find "$prefix_dir/lib" -name "*.la" -delete 2>/dev/null || true
+find "$prefix_dir/lib" -name "*.dll" -delete 2>/dev/null || true
 
 ## Build libmpv as DLL with all deps statically linked
 # Restore crossfile to shared — only libmpv itself should be a DLL
