@@ -67,9 +67,7 @@ static_meson lcms2      -Dtests=disabled
 static_meson libplacebo -Ddemos=false
 static_meson libass
 
-static_cmake shaderc     -DSHADERC_SKIP_TESTS=ON
-static_cmake SPIRV-Cross -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_SHARED=OFF -DSPIRV_CROSS_CLI=OFF \
-    -DSPIRV_CROSS_ENABLE_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
+# shaderc/spirv-cross: keep as shared — too many internal deps to static-link cleanly
 
 # --- Versioned deps (dir name includes version) ---
 static_meson freetype-2.14.3
