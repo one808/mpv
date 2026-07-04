@@ -249,8 +249,7 @@ _libplacebo () {
     [ -d libplacebo ] || $gitclone https://code.videolan.org/videolan/libplacebo.git
     builddir libplacebo
     meson setup .. --cross-file "$prefix_dir/crossfile" \
-        -Ddemos=false -D{opengl,lcms}=enabled -Dd3d11=disabled -Dvulkan=disabled \
-        -Ddefault_library=shared
+        -Ddemos=false -D{opengl,lcms}=enabled -Dd3d11=disabled -Dvulkan=disabled
     makeplusinstall
     popd
 }
@@ -342,8 +341,12 @@ done
 
 ## mpv
 
+# Build charconv compatibility shim for MinGW i686 (lacks std::to_chars/from_chars for float)
+${TARGET}-g++-posix -c -O2 -std=c++17 ci/charconv_compat.cpp \
+    -o "$prefix_dir/charconv_compat.o"
+
 export CFLAGS+=" -I'$prefix_dir/include'"
-export LDFLAGS+=" -L'$prefix_dir/lib'"
+export LDFLAGS+=" -L'$prefix_dir/lib' $prefix_dir/charconv_compat.o"
 build=mingw_build
 rm -rf $build
 
