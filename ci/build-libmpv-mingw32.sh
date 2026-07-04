@@ -24,7 +24,8 @@ static_meson() {
     rm -rf "$dir/builddir"
     mkdir -p "$dir/builddir"
     pushd "$dir/builddir"
-    meson setup .. --cross-file "$prefix_dir/crossfile" "$@"
+    meson setup .. --cross-file "$prefix_dir/crossfile" \
+        -Ddefault_library=static "$@"
     ninja
     DESTDIR="$prefix_dir" ninja install
     popd
@@ -53,9 +54,25 @@ static_cmake() {
     popd
 }
 
+## Helper: rebuild an autotools project as static
+static_at() {
+    local dir=$1; shift
+    [ -d "$dir" ] || return 0
+    rm -rf "$dir/builddir"
+    mkdir -p "$dir/builddir"
+    pushd "$dir/builddir"
+    ../configure --host=$TARGET --enable-static --disable-shared "$@"
+    make -j$(nproc)
+    DESTDIR="$prefix_dir" make install
+    popd
+}
+
 echo "::group::Rebuilding deps as static libraries"
 
-# Rebuild ffmpeg as static
+# Autotools deps
+static_at libiconv-1.19
+
+# FFmpeg (special handling — autotools with extra options)
 if [ -d ffmpeg ]; then
     rm -rf ffmpeg/builddir
     mkdir -p ffmpeg/builddir
@@ -68,11 +85,11 @@ if [ -d ffmpeg ]; then
         --enable-muxer=spdif --enable-encoder=mjpeg,png --enable-libdav1d \
         --prefix=/usr
     make -j$(nproc)
-    make DESTDIR="$prefix_dir" install
+    DESTDIR="$prefix_dir" make install
     popd
 fi
 
-# Meson deps — each has different option names for disabling tests
+# Meson deps — explicit -Ddefault_library=static for each
 static_meson dav1d      -Denable_{tools,tests}=false
 static_meson lcms2      -Dtests=disabled
 static_meson libplacebo -Ddemos=false
@@ -83,24 +100,18 @@ static_meson libass
 
 # CMake deps
 static_cmake shaderc     -DSHADERC_SKIP_TESTS=ON
-static_cmake spirv-cross -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_{CLI,STATIC}=OFF
+static_cmake spirv-cross
 static_cmake curl        -DCURL_{USE_SCHANNEL,ZLIB}=ON -DCURL_DISABLE_LDAP=ON -DCURL_USE_LIBPSL=OFF
-
-# zlib-ng (cmake)
-static_cmake zlib-ng -DZLIB_COMPAT=ON -DBUILD_TESTING=OFF
-
-# libiconv (autotools) — rebuild as static
-if [ -d libiconv-1.19 ]; then
-    rm -rf libiconv-1.19/builddir
-    mkdir -p libiconv-1.19/builddir
-    pushd libiconv-1.19/builddir
-    ../configure --host=$TARGET --enable-static --disable-shared
-    make -j$(nproc)
-    make DESTDIR="$prefix_dir" install
-    popd
-fi
+static_cmake zlib-ng     -DZLIB_COMPAT=ON -DBUILD_TESTING=OFF
 
 echo "::endgroup::"
+
+# Remove shared libs from prefix — only keep static .a files
+# This forces meson/mpv to link against the static versions
+find "$prefix_dir/lib" -name "*.dll.a" -delete 2>/dev/null || true
+find "$prefix_dir/lib" -name "*.dll" -delete 2>/dev/null || true
+find "$prefix_dir/bin" -name "*.dll" -delete 2>/dev/null || true
+find "$prefix_dir/lib" -name "*.la" -delete 2>/dev/null || true
 
 ## Build libmpv as DLL with all deps statically linked
 # Restore crossfile to shared — only libmpv itself should be a DLL
