@@ -196,12 +196,12 @@ _shaderc () {
         -DCMAKE_RC_COMPILER="${TARGET}-windres" \
         -DCMAKE_FIND_ROOT_PATH="$prefix_dir" \
         -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_SHARED_LIBS=ON \
         -DSHADERC_SKIP_TESTS=ON
     makeplusinstall
     popd
 }
-_shaderc_mark=lib/libshaderc.a
+_shaderc_mark=lib/libshaderc_shared.dll.a
 
 _spirv_cross () {
     [ -d SPIRV-Cross ] || $gitclone https://github.com/KhronosGroup/SPIRV-Cross
@@ -214,15 +214,15 @@ _spirv_cross () {
         -DCMAKE_RC_COMPILER="${TARGET}-windres" \
         -DCMAKE_FIND_ROOT_PATH="$prefix_dir" \
         -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_SHARED_LIBS=OFF \
-        -DSPIRV_CROSS_STATIC=ON \
-        -DSPIRV_CROSS_SHARED=OFF \
+        -DBUILD_SHARED_LIBS=ON \
+        -DSPIRV_CROSS_SHARED=ON \
+        -DSPIRV_CROSS_STATIC=OFF \
         -DSPIRV_CROSS_CLI=OFF \
         -DSPIRV_CROSS_ENABLE_TESTS=OFF
     makeplusinstall
     popd
 }
-_spirv_cross_mark=lib/libspirv-cross-c.a
+_spirv_cross_mark=lib/libspirv-cross-c-shared.dll.a
 
 _nv_headers () {
     [ -d nv-codec-headers ] || $gitclone https://github.com/FFmpeg/nv-codec-headers
