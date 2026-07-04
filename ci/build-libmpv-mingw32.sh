@@ -189,11 +189,11 @@ _shaderc () {
     fi
     builddir shaderc
     cmake .. "${cmake_args[@]}" \
-        -DBUILD_SHARED_LIBS=OFF -DSHADERC_SKIP_TESTS=ON
+        -DBUILD_SHARED_LIBS=ON -DSHADERC_SKIP_TESTS=ON
     makeplusinstall
     popd
 }
-_shaderc_mark=lib/libshaderc.a
+_shaderc_mark=lib/libshaderc_shared.dll.a
 
 _spirv_cross () {
     [ -d SPIRV-Cross ] || $gitclone https://github.com/KhronosGroup/SPIRV-Cross
