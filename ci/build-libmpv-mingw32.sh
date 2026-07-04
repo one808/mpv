@@ -25,8 +25,8 @@ export AR=$TARGET-ar
 export NM=$TARGET-nm
 export RANLIB=$TARGET-ranlib
 
-export CFLAGS="-O2 -pipe -Wall"
-export LDFLAGS="-fstack-protector-strong"
+export CFLAGS="-Os -pipe -Wall -ffunction-sections -fdata-sections"
+export LDFLAGS="-fstack-protector-strong -Wl,--gc-sections"
 
 # anything that uses pkg-config
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
@@ -75,6 +75,9 @@ cmake_args=(
     -DCMAKE_RC_COMPILER="${TARGET}-windres"
     -DCMAKE_ASM_COMPILER="$AS"
     -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_C_FLAGS="-Os -ffunction-sections -fdata-sections"
+    -DCMAKE_CXX_FLAGS="-Os -ffunction-sections -fdata-sections"
+    -DCMAKE_EXE_LINKER_FLAGS="-Wl,--gc-sections"
     -DBUILD_SHARED_LIBS=ON
 )
 
@@ -342,11 +345,11 @@ done
 ## mpv
 
 # Build charconv compatibility shim for MinGW i686 (lacks std::to_chars/from_chars for float)
-${TARGET}-g++-posix -c -O2 -std=c++17 ci/charconv_compat.cpp \
+${TARGET}-g++-posix -c -Os -std=c++17 ci/charconv_compat.cpp \
     -o "$prefix_dir/charconv_compat.o"
 
-export CFLAGS+=" -I'$prefix_dir/include'"
-export LDFLAGS+=" -L'$prefix_dir/lib' $prefix_dir/charconv_compat.o -static-libgcc -static-libstdc++ -Wl,-Bstatic -lpthread -Wl,-Bdynamic"
+export CFLAGS+=" -I'$prefix_dir/include' -Os -ffunction-sections -fdata-sections"
+export LDFLAGS+=" -L'$prefix_dir/lib' $prefix_dir/charconv_compat.o -static-libgcc -static-libstdc++ -Wl,-Bstatic -lpthread -Wl,-Bdynamic -Wl,--gc-sections -Wl,--strip-all"
 build=mingw_build
 rm -rf $build
 
