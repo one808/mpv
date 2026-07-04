@@ -15,6 +15,9 @@ export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
 # Change crossfile to static
 sed -i "s/default_library = 'shared'/default_library = 'static'/" "$prefix_dir/crossfile"
 
+# Set WINEPATH early — needed for meson sanity checks in cross builds
+export WINEPATH="$(/usr/bin/$TARGET-gcc-posix -print-file-name=);/usr/$TARGET/lib;$prefix_dir/bin"
+
 # Rebuild ffmpeg as static
 if [ -d ffmpeg ]; then
     rm -rf ffmpeg/builddir
@@ -49,13 +52,8 @@ static_meson() {
 [ -d libplacebo ] && static_meson libplacebo -Ddefault_library=static -Ddemos=false
 
 # Now build libmpv as DLL with static deps
-export CC="ccache $TARGET-gcc-posix"
-export CXX="ccache $TARGET-g++-posix"
 export CFLAGS="-O2 -pipe -Wall -I'$prefix_dir/include'"
 export LDFLAGS="-fstack-protector-strong -L'$prefix_dir/lib'"
-export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
-export PKG_CONFIG_LIBDIR="$PKG_CONFIG_SYSROOT_DIR/lib/pkgconfig"
-export WINEPATH="$(/usr/bin/$TARGET-gcc-posix -print-file-name=);/usr/$TARGET/lib;$prefix_dir/bin"
 
 build=mingw_build
 rm -rf $build
