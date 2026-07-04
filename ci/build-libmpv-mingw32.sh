@@ -332,7 +332,7 @@ _curl () {
 }
 _curl_mark=lib/libcurl.a
 
-for x in iconv zlib-ng shaderc spirv-cross amf-headers nv-headers dav1d lcms2; do
+for x in iconv zlib-ng amf-headers nv-headers dav1d lcms2; do
     build_if_missing $x
 done
 for x in ffmpeg libplacebo freetype fribidi harfbuzz libass luajit curl; do
@@ -354,7 +354,8 @@ mpv_args=(
     -Dmujs:werror=false
     -Dmujs:default_library=static
     -Dlua=luajit
-    -D{amf,shaderc,spirv-cross,d3d11,javascript,libcurl}=enabled
+    -D{amf,d3d11,javascript,libcurl}=enabled \
+    -D{shaderc,spirv-cross}=disabled
     -Dlibmpv=true
     -Dcplayer=false
     -Dtests=false
