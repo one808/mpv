@@ -33,7 +33,7 @@ if [ -d ffmpeg ]; then
 fi
 
 # Rebuild other deps as static where needed
-for dep in dav1d lcms2 libplacebo; do
+for dep in lcms2 libplacebo; do
     if [ -d "$dep" ]; then
         rm -rf "$dep/builddir"
         mkdir -p "$dep/builddir"
@@ -45,6 +45,18 @@ for dep in dav1d lcms2 libplacebo; do
         popd
     fi
 done
+
+# dav1d uses different option names
+if [ -d dav1d ]; then
+    rm -rf dav1d/builddir
+    mkdir -p dav1d/builddir
+    pushd dav1d/builddir
+    meson setup .. --cross-file "$prefix_dir/crossfile" \
+        -Ddefault_library=static -Denable_{tools,tests}=false
+    ninja
+    DESTDIR="$prefix_dir" ninja install
+    popd
+fi
 
 # Now build libmpv as DLL with static deps
 export CC="ccache $TARGET-gcc-posix"
