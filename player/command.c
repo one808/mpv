@@ -2878,10 +2878,15 @@ static int mp_property_hidpi_scale(void *ctx, struct m_property *prop,
 {
     MPContext *mpctx = ctx;
     struct command_ctx *cmd = mpctx->command_ctx;
-    struct vo *vo = mpctx->video_out;
-    if (!vo)
-        return M_PROPERTY_UNAVAILABLE;
+    if (action == M_PROPERTY_SET) {
+        double scale = *(double *)arg;
+        cmd->cached_window_scale = scale;
+        return M_PROPERTY_OK;
+    }
     if (!cmd->cached_window_scale) {
+        struct vo *vo = mpctx->video_out;
+        if (!vo)
+            return M_PROPERTY_UNAVAILABLE;
         double scale = 0;
         if (vo_control(vo, VOCTRL_GET_HIDPI_SCALE, &scale) < 1 || !scale)
             scale = -1;
