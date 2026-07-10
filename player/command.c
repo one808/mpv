@@ -2880,7 +2880,13 @@ static int mp_property_hidpi_scale(void *ctx, struct m_property *prop,
     struct command_ctx *cmd = mpctx->command_ctx;
     if (action == M_PROPERTY_SET_NODE) {
         struct mpv_node *node = arg;
-        double scale = node->u.double_;
+        double scale;
+        if (node->format == MPV_FORMAT_STRING)
+            scale = atof(node->u.string);
+        else if (node->format == MPV_FORMAT_DOUBLE)
+            scale = node->u.double_;
+        else
+            return M_PROPERTY_NOT_IMPLEMENTED;
         cmd->cached_window_scale = scale;
         mp_notify_property(mpctx, prop->name);
         return M_PROPERTY_OK;
