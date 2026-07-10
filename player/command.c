@@ -2881,6 +2881,7 @@ static int mp_property_hidpi_scale(void *ctx, struct m_property *prop,
     if (action == M_PROPERTY_SET) {
         double scale = *(double *)arg;
         cmd->cached_window_scale = scale;
+        mp_notify_property(mpctx, prop->name);
         return M_PROPERTY_OK;
     }
     if (!cmd->cached_window_scale) {
